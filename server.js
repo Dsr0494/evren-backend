@@ -11,27 +11,42 @@ const qrcode = require('qrcode');
 const app = express();
 
 // ==========================================
-// 🛡️ 1. GUARDIA DE SEGURIDAD (CORS) - VERSIÓN EXPRESS 5
+// 🛡️ 1. GUARDIA DE SEGURIDAD MANUAL (BYPASS TOTAL DE CORS)
 // ==========================================
-app.use(cors({
-  origin: true, // Modo espejo: permite la entrada a tu frontend en Vercel y localhost
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true
-}));
+app.use((req, res, next) => {
+  // Modo Espejo Absoluto: Deja pasar a quien sea que toque la puerta
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
 
-// Parser de JSON
+  // Si es el "mensaje fantasma" (OPTIONS), le abrimos la puerta inmediatamente
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
+// ==========================================
+// ⚙️ 2. CONFIGURACIONES BÁSICAS
+// ==========================================
 app.use(express.json({ limit: '50mb' })); 
-
 const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
 
 // ==========================================
-// 🚀 2. CONEXIÓN Y MODELOS DE MONGODB ATLAS
+// 🚀 3. CONEXIÓN Y MODELOS DE MONGODB ATLAS
 // ==========================================
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('🔥 ¡Bóveda conectada! MongoDB Atlas en línea.'))
   .catch(err => console.error('❌ Error fatal al conectar a MongoDB:', err));
 
-// Modelos de Base de Datos (Estructuras flexibles)
 const Usuario = mongoose.model('Usuario', new mongoose.Schema({
   nombre: String,
   usuario: { type: String, unique: true },
@@ -50,7 +65,7 @@ const Traspaso = mongoose.model('Traspaso', new mongoose.Schema({}, { strict: fa
 const Catalogo = mongoose.model('Catalogo', new mongoose.Schema({ tipo: String, data: Object }, { timestamps: true }));
 
 // ==========================================
-// 🚀 3. AUTO-POBLADOR DE USUARIOS
+// 🚀 4. AUTO-POBLADOR DE USUARIOS (¡Recuperados!)
 // ==========================================
 const poblarUsuarios = async () => {
   const count = await Usuario.countDocuments();
@@ -72,7 +87,7 @@ const poblarUsuarios = async () => {
 poblarUsuarios();
 
 // ==========================================
-// 🚀 4. RUTAS DE 2FA (GOOGLE AUTHENTICATOR)
+// 🚀 5. RUTAS DE 2FA (GOOGLE AUTHENTICATOR)
 // ==========================================
 app.post('/api/auth/2fa/setup', async (req, res) => {
   const { usuario } = req.body;
@@ -110,7 +125,7 @@ app.post('/api/auth/2fa/verify-setup', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 5. RUTAS DE AUTENTICACIÓN (LOGIN)
+// 🚀 6. RUTAS DE AUTENTICACIÓN (LOGIN)
 // ==========================================
 app.post('/api/auth/login', async (req, res) => {
   try {
@@ -153,7 +168,7 @@ app.get('/api/usuarios', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 6. RUTAS DE VENTAS Y COTIZACIONES 
+// 🚀 7. RUTAS DE VENTAS Y COTIZACIONES 
 // ==========================================
 app.get('/api/ventas', async (req, res) => {
     const ventas = await Venta.find().sort({ createdAt: -1 });
@@ -186,7 +201,7 @@ app.post('/api/cotizaciones', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 7. RUTAS DE TRASPASOS Y CATÁLOGOS
+// 🚀 8. RUTAS DE TRASPASOS Y CATÁLOGOS
 // ==========================================
 app.get('/api/traspasos', async (req, res) => {
   const traspasos = await Traspaso.find().sort({ createdAt: -1 });
