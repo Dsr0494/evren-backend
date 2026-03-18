@@ -10,17 +10,22 @@ const qrcode = require('qrcode');
 
 const app = express();
 
-// 1️⃣ PRIMERO EL GUARDIA DE SEGURIDAD (CORS) - PASE UNIVERSAL NUCLEAR ☢️
-app.use(cors()); // Deja entrar a TODAS las páginas web
-app.options('*', cors()); // Responde amablemente al "Preflight Request" del navegador
+// ==========================================
+// 🛡️ 1. GUARDIA DE SEGURIDAD (CORS) - VERSIÓN EXPRESS 5
+// ==========================================
+app.use(cors({
+  origin: true, // Modo espejo: permite la entrada a tu frontend en Vercel y localhost
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true
+}));
 
-// 2️⃣ LUEGO EL PARSER DE JSON
+// Parser de JSON
 app.use(express.json({ limit: '50mb' })); 
 
 const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
 
 // ==========================================
-// 🚀 1. CONEXIÓN Y MODELOS DE MONGODB ATLAS
+// 🚀 2. CONEXIÓN Y MODELOS DE MONGODB ATLAS
 // ==========================================
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('🔥 ¡Bóveda conectada! MongoDB Atlas en línea.'))
@@ -45,9 +50,8 @@ const Traspaso = mongoose.model('Traspaso', new mongoose.Schema({}, { strict: fa
 const Catalogo = mongoose.model('Catalogo', new mongoose.Schema({ tipo: String, data: Object }, { timestamps: true }));
 
 // ==========================================
-// 🚀 2. AUTO-POBLADOR DE USUARIOS
+// 🚀 3. AUTO-POBLADOR DE USUARIOS
 // ==========================================
-// Si la base de datos está vacía, sube la lista original a la nube
 const poblarUsuarios = async () => {
   const count = await Usuario.countDocuments();
   if (count === 0) {
@@ -55,7 +59,6 @@ const poblarUsuarios = async () => {
     const usuariosBase = [
       { nombre: "LAURA BAUTISTA CONDE", usuario: "LB9748", contrasena: "A7k3$B91d2", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
       { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "ADMINISTRADOR" },
-      // Aquí agregamos algunos de muestra, luego puedes añadir más desde un panel admin
       { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "kT9a3$M7Q2", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESAS", nivelAcceso: "USUARIO" }
     ];
 
@@ -69,7 +72,7 @@ const poblarUsuarios = async () => {
 poblarUsuarios();
 
 // ==========================================
-// 🚀 3. RUTAS DE 2FA (GOOGLE AUTHENTICATOR)
+// 🚀 4. RUTAS DE 2FA (GOOGLE AUTHENTICATOR)
 // ==========================================
 app.post('/api/auth/2fa/setup', async (req, res) => {
   const { usuario } = req.body;
@@ -78,7 +81,6 @@ app.post('/api/auth/2fa/setup', async (req, res) => {
 
   const secret = speakeasy.generateSecret({ name: `Evren Corp (${user.usuario})` });
   
-  // Guardar el secreto temporalmente en la BD
   user.dosPasosSecreto = secret.base32;
   await user.save();
 
@@ -108,7 +110,7 @@ app.post('/api/auth/2fa/verify-setup', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 4. RUTAS DE AUTENTICACIÓN (LOGIN)
+// 🚀 5. RUTAS DE AUTENTICACIÓN (LOGIN)
 // ==========================================
 app.post('/api/auth/login', async (req, res) => {
   try {
@@ -151,7 +153,7 @@ app.get('/api/usuarios', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 5. RUTAS DE VENTAS Y COTIZACIONES (EN LA NUBE)
+// 🚀 6. RUTAS DE VENTAS Y COTIZACIONES 
 // ==========================================
 app.get('/api/ventas', async (req, res) => {
     const ventas = await Venta.find().sort({ createdAt: -1 });
@@ -162,7 +164,6 @@ app.post('/api/ventas', async (req, res) => {
     try {
         const nuevaVenta = new Venta(req.body);
         await nuevaVenta.save();
-        console.log("✅ Venta guardada en MongoDB:", nuevaVenta._id);
         res.status(201).json({ message: "Venta guardada exitosamente", data: nuevaVenta });
     } catch (error) {
         res.status(500).json({ error: "Error al guardar venta en la nube" });
@@ -178,7 +179,6 @@ app.post('/api/cotizaciones', async (req, res) => {
     try {
         const nuevaCotizacion = new Cotizacion(req.body);
         await nuevaCotizacion.save();
-        console.log("📄 Cotización guardada en MongoDB");
         res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion });
     } catch (error) {
         res.status(500).json({ error: "Error al guardar cotización" });
@@ -186,7 +186,7 @@ app.post('/api/cotizaciones', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 6. RUTAS DE TRASPASOS Y CATÁLOGOS
+// 🚀 7. RUTAS DE TRASPASOS Y CATÁLOGOS
 // ==========================================
 app.get('/api/traspasos', async (req, res) => {
   const traspasos = await Traspaso.find().sort({ createdAt: -1 });
@@ -217,7 +217,7 @@ app.get('/api/catalogos/:tipo', async (req, res) => {
 });
 
 // ==========================================
-// INICIAR SERVIDOR
+// 🚀 INICIAR SERVIDOR
 // ==========================================
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
