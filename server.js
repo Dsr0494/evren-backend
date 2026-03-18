@@ -10,15 +10,9 @@ const qrcode = require('qrcode');
 
 const app = express();
 
-// 1️⃣ PRIMERO EL GUARDIA DE SEGURIDAD (CORS) - CORREGIDO
-app.use(cors({
-  origin: [
-    'http://localhost:5173', // Para cuando trabajes en tu compu
-    'https://evren-frontend.vercel.app' // ¡Tu nueva página en la nube!
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
-}));
+// 1️⃣ PRIMERO EL GUARDIA DE SEGURIDAD (CORS) - PASE UNIVERSAL NUCLEAR ☢️
+app.use(cors()); // Deja entrar a TODAS las páginas web
+app.options('*', cors()); // Responde amablemente al "Preflight Request" del navegador
 
 // 2️⃣ LUEGO EL PARSER DE JSON
 app.use(express.json({ limit: '50mb' })); 
