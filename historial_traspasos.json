@@ -1,0 +1,210 @@
+[
+  {
+    "id": 1773804634097,
+    "fecha": "17/3/2026, 9:30:34 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "equipos",
+    "identificador": "356441900584502",
+    "descripcionArticulo": "MOTOROLA MOTOROLA MOTO G54",
+    "sucursalOrigen": "HT9 - EVREN PEDREGAL DE SAN NICOLAS CDMX",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773804439696,
+    "fecha": "17/3/2026, 9:27:19 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "ENVÍO",
+    "tipoArticulo": "equipos",
+    "identificador": "356441900584502",
+    "descripcionArticulo": "MOTOROLA MOTOROLA MOTO G54",
+    "sucursalOrigen": "HT9 - EVREN PEDREGAL DE SAN NICOLAS CDMX",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773797716320,
+    "fecha": "17/3/2026, 7:35:16 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "equipos",
+    "identificador": "351321614779765",
+    "descripcionArticulo": "REDMI REDMI NOTE 15",
+    "sucursalOrigen": "Otra Sucursal",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773797714637,
+    "fecha": "17/3/2026, 7:35:14 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "equipos",
+    "identificador": "353520996630148",
+    "descripcionArticulo": "MOTOROLA MOTOROLA MOTO G56",
+    "sucursalOrigen": "Otra Sucursal",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773797662550,
+    "fecha": "17/3/2026, 7:34:22 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "ENVÍO",
+    "tipoArticulo": "equipos",
+    "identificador": "351321614779765",
+    "descripcionArticulo": "REDMI REDMI NOTE 15",
+    "sucursalOrigen": "General",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773797593073,
+    "fecha": "17/3/2026, 7:33:13 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "ENVÍO",
+    "tipoArticulo": "equipos",
+    "identificador": "353520996630148",
+    "descripcionArticulo": "MOTOROLA MOTOROLA MOTO G56",
+    "sucursalOrigen": "General",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773796931759,
+    "fecha": "17/3/2026, 7:22:11 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "sims",
+    "identificador": "8952057734455025739F",
+    "descripcionArticulo": "Tarjeta SIM",
+    "sucursalOrigen": "Otra Sucursal",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773796906832,
+    "fecha": "17/3/2026, 7:21:46 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "ENVÍO",
+    "tipoArticulo": "sims",
+    "identificador": "8952057734455025739F",
+    "descripcionArticulo": "Tarjeta SIM",
+    "sucursalOrigen": "General",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773796483423,
+    "fecha": "17/3/2026, 7:14:43 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "equipos",
+    "identificador": "355409827881769",
+    "descripcionArticulo": "APPLE APPLE IPHONE 17 PRO 512GB",
+    "sucursalOrigen": "ED1 - EVREN XOCHIMILCO CENTRO",
+    "sucursalDestino": "HZ9 - EVREN SAN PEDRO MARTIR CDMX"
+  },
+  {
+    "id": 1773796481073,
+    "fecha": "17/3/2026, 7:14:41 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "equipos",
+    "identificador": "350450195815822",
+    "descripcionArticulo": "APPLE APPLE IPHONE 16 PRO 256GB",
+    "sucursalOrigen": "ED1 - EVREN XOCHIMILCO CENTRO",
+    "sucursalDestino": "HZ9 - EVREN SAN PEDRO MARTIR CDMX"
+  },
+  {
+    "id": 1773796450282,
+    "fecha": "17/3/2026, 7:14:10 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "accion": "ENVÍO",
+    "tipoArticulo": "equipos",
+    "identificador": "355409827881769",
+    "descripcionArticulo": "APPLE APPLE IPHONE 17 PRO 512GB",
+    "sucursalOrigen": "ED1 - EVREN XOCHIMILCO CENTRO",
+    "sucursalDestino": "HZ9 - EVREN SAN PEDRO MARTIR CDMX"
+  },
+  {
+    "id": 1773796372147,
+    "fecha": "17/3/2026, 7:12:52 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "accion": "ENVÍO",
+    "tipoArticulo": "equipos",
+    "identificador": "350450195815822",
+    "descripcionArticulo": "APPLE APPLE IPHONE 16 PRO 256GB",
+    "sucursalOrigen": "ED1 - EVREN XOCHIMILCO CENTRO",
+    "sucursalDestino": "HZ9 - EVREN SAN PEDRO MARTIR CDMX"
+  },
+  {
+    "id": 1773796159234,
+    "fecha": "17/3/2026, 7:09:19 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "equipos",
+    "identificador": "350450195815822",
+    "descripcionArticulo": "APPLE APPLE IPHONE 16 PRO 256GB",
+    "sucursalOrigen": "HZ9 - EVREN SAN PEDRO MARTIR CDMX",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773796138899,
+    "fecha": "17/3/2026, 7:08:58 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "ENVÍO",
+    "tipoArticulo": "equipos",
+    "identificador": "350450195815822",
+    "descripcionArticulo": "APPLE APPLE IPHONE 16 PRO 256GB",
+    "sucursalOrigen": "HZ9 - EVREN SAN PEDRO MARTIR CDMX",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773795008388,
+    "fecha": "17/3/2026, 6:50:08 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "equipos",
+    "identificador": "355409827881769",
+    "descripcionArticulo": "APPLE APPLE IPHONE 17 PRO 512GB",
+    "sucursalOrigen": "HZ9 - EVREN SAN PEDRO MARTIR CDMX",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773794962527,
+    "fecha": "17/3/2026, 6:49:22 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "ENVÍO",
+    "tipoArticulo": "equipos",
+    "identificador": "355409827881769",
+    "descripcionArticulo": "APPLE APPLE IPHONE 17 PRO 512GB",
+    "sucursalOrigen": "HZ9 - EVREN SAN PEDRO MARTIR CDMX",
+    "sucursalDestino": "ED1 - EVREN XOCHIMILCO CENTRO"
+  },
+  {
+    "id": 1773794302175,
+    "fecha": "17/3/2026, 6:38:22 p.m.",
+    "usuario": "DANIEL SANTANA ROSALES",
+    "accion": "RECEPCIÓN",
+    "tipoArticulo": "equipos",
+    "identificador": "355409827881769",
+    "descripcionArticulo": "APPLE APPLE IPHONE 17 PRO 512GB",
+    "sucursalOrigen": "ED1 - EVREN XOCHIMILCO CENTRO",
+    "sucursalDestino": "HZ9 - EVREN SAN PEDRO MARTIR CDMX"
+  },
+  {
+    "id": 1773794261905,
+    "fecha": "17/3/2026, 6:37:41 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "accion": "ENVÍO",
+    "tipoArticulo": "equipos",
+    "identificador": "355409827881769",
+    "descripcionArticulo": "APPLE APPLE IPHONE 17 PRO 512GB",
+    "sucursalOrigen": "ED1 - EVREN XOCHIMILCO CENTRO",
+    "sucursalDestino": "HZ9 - EVREN SAN PEDRO MARTIR CDMX"
+  },
+  {
+    "id": 1773793826929,
+    "fecha": "17/3/2026, 6:30:26 p.m.",
+    "usuario": "JESUS GALEANA VALENCIANA",
+    "tipoArticulo": "equipos",
+    "identificador": "354427070861514",
+    "descripcionArticulo": "APPLE APPLE IPHONE 16 PLUS 256GB",
+    "sucursalOrigen": "ED1 - EVREN XOCHIMILCO CENTRO",
+    "sucursalDestino": "HZ9 - EVREN SAN PEDRO MARTIR CDMX"
+  }
+]
