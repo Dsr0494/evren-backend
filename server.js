@@ -1,10 +1,9 @@
-// server.js
 require('dotenv').config(); 
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs'); 
-const mongoose = require('mongoose');
+const mongoose = require('mongoose'); // 👈 Mongoose Importado
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
 
@@ -14,7 +13,6 @@ const app = express();
 // 🛡️ 1. GUARDIA DE SEGURIDAD MANUAL (BYPASS TOTAL DE CORS)
 // ==========================================
 app.use((req, res, next) => {
-  // Modo Espejo Absoluto: Deja pasar a quien sea que toque la puerta
   const origin = req.headers.origin;
   if (origin) {
     res.header('Access-Control-Allow-Origin', origin);
@@ -22,102 +20,125 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
   }
   
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
 
-  // Si es el "mensaje fantasma" (OPTIONS), le abrimos la puerta inmediatamente
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-
   next();
 });
 
-// ==========================================
-// ⚙️ 2. CONFIGURACIONES BÁSICAS
-// ==========================================
 app.use(express.json({ limit: '50mb' })); 
-const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
 
 // ==========================================
-// 🚀 3. CONEXIÓN Y MODELOS DE MONGODB ATLAS
+// 🚀 CONEXIÓN A LA NUBE (MONGODB ATLAS)
 // ==========================================
+if (!process.env.MONGO_URI) {
+  console.error('❌ FATAL: MONGO_URI no está definido en el archivo .env o en las variables de entorno de Render.');
+  process.exit(1);
+}
+
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('🔥 ¡Bóveda conectada! MongoDB Atlas en línea.'))
   .catch(err => console.error('❌ Error fatal al conectar a MongoDB:', err));
 
-const Usuario = mongoose.model('Usuario', new mongoose.Schema({
-  nombre: String,
-  usuario: { type: String, unique: true },
-  contrasenaEncriptada: String,
-  categoria: String,
-  organizacion: String,
-  sucursal: String,
-  nivelAcceso: String,
-  dosPasosActivo: { type: Boolean, default: false },
-  dosPasosSecreto: String
-}));
-
-const Venta = mongoose.model('Venta', new mongoose.Schema({}, { strict: false, timestamps: true }));
-const Cotizacion = mongoose.model('Cotizacion', new mongoose.Schema({}, { strict: false, timestamps: true }));
-const Traspaso = mongoose.model('Traspaso', new mongoose.Schema({}, { strict: false, timestamps: true }));
-const Catalogo = mongoose.model('Catalogo', new mongoose.Schema({ tipo: String, data: Object }, { timestamps: true }));
-
 // ==========================================
-// 🚀 4. AUTO-POBLADOR DE USUARIOS (¡Recuperados!)
+// 📦 MODELOS DE MONGODB (Esquemas Flexibles)
 // ==========================================
-const poblarUsuarios = async () => {
-  const count = await Usuario.countDocuments();
-  if (count === 0) {
-    console.log("⏳ Subiendo usuarios a la nube por primera vez...");
-    const usuariosBase = [
-      { nombre: "LAURA BAUTISTA CONDE", usuario: "LB9748", contrasena: "A7k3$B91d2", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-      { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "ADMINISTRADOR" },
-      { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "kT9a3$M7Q2", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESAS", nivelAcceso: "USUARIO" }
-    ];
+// strict: false permite recibir cualquier estructura JSON del frontend
+const catalogoSchema = new mongoose.Schema({ tipo: String, data: mongoose.Schema.Types.Mixed });
+const Catalogo = mongoose.model('Catalogo', catalogoSchema);
 
-    for (let u of usuariosBase) {
-      const hash = bcrypt.hashSync(String(u.contrasena), 10);
-      await Usuario.create({ ...u, contrasenaEncriptada: hash });
-    }
-    console.log("✅ ¡Usuarios subidos a MongoDB exitosamente!");
-  }
-};
-poblarUsuarios();
+const ventaSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
+const Venta = mongoose.model('Venta', ventaSchema);
+
+const cotizacionSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
+const Cotizacion = mongoose.model('Cotizacion', cotizacionSchema);
+
+const traspasoSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
+const Traspaso = mongoose.model('Traspaso', traspasoSchema);
+
 
 // ==========================================
-// 🚀 5. RUTAS DE 2FA (GOOGLE AUTHENTICATOR)
+// BASE DE DATOS LOCAL EN MEMORIA (USUARIOS)
 // ==========================================
-app.post('/api/auth/2fa/setup', async (req, res) => {
+const usuariosDB = [
+  { nombre: "LAURA BAUTISTA CONDE", usuario: "LB9748", contrasena: "A7k3$B91d2", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+  { nombre: "LAURA GALEANA VALENCIANA", usuario: "LG220B", contrasena: "4mQ8!2Lp67", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+  { nombre: "JOSE ADRIAN FUENTES MENDIOLA", usuario: "JF2778", contrasena: "9tB1@3kA45", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+  { nombre: "MARCIA ELENA SUAREZ ROSALES", usuario: "MX5476", contrasena: "6f2#p8R19d", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+  { nombre: "EDGAR JAVIER IBARRA FUENTES", usuario: "EI7886", contrasena: "3Z7!L4mK28", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "LESLIE GUADALUPE LUNA VILLEGAS", usuario: "LL3908", contrasena: "P1d9@7tA63", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MARIANA VANESSA ESPINOSA LAGUNAS", usuario: "ME5986", contrasena: "8b5$R2K41q", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MARTHA LUCIA URIBE ROSAS", usuario: "MU8925", contrasena: "2Y6!a8C19M", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MIGUEL RODRIGO FLORES GONZALEZ", usuario: "MF5730", contrasena: "7w3#Q4N25d", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "ABIGAIL ALBERTO VILLANUEVA", usuario: "AA544V", contrasena: "0", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "CARLOS ALEXANDER CALDERON LOPEZ", usuario: "CC534D", contrasena: "1p5!F3tA92", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "ADMINISTRADOR" },
+  { nombre: "GABRIEL CORIA SEGURA", usuario: "GC1480", contrasena: "6A1@q9H37k", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "JESUS GALEANA VALENCIANA", usuario: "JG215P", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "JONATHAN CARRASCO CRUZ", usuario: "JO5517", contrasena: "5u2!R1C9k6", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT5 - EVREN CORP TULANCINGO HGO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MARCO ANTONIO LUCERO HERNANDEZ", usuario: "ML069A", contrasena: "8T4@d7M12p", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT9 - EVREN PEDREGAL DE SAN NICOLAS CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MAYRA JAZMIN MAR CRUZ", usuario: "MM877B", contrasena: "1Z9$K3b78Q", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "SHARON MICHELLE ARROYO MARTINEZ", usuario: "SA9485", contrasena: "6f5!P2A19L", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "ANGEL ROSAS HERNANDEZ", usuario: "AR788A", contrasena: "2m8@X7d41R", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+  { nombre: "ESAU ROSALES TINOCO", usuario: "ER1982", contrasena: "7Q3#L6n25A", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+  { nombre: "OWEN GAEL CARBAJAL GONZALEZ", usuario: "OC8710", contrasena: "9A1!k4P82t", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+  { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "kT9a3$M7Q2", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESAS", nivelAcceso: "USUARIO" }
+];
+
+usuariosDB.forEach(user => {
+  user.contrasenaEncriptada = bcrypt.hashSync(String(user.contrasena), 10);
+  user.dosPasosActivo = false; 
+  user.dosPasosSecreto = null; 
+});
+
+const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
+
+// ==========================================
+// 🚀 RUTAS DE 2FA (GOOGLE AUTHENTICATOR)
+// ==========================================
+app.post('/api/auth/2fa/setup', (req, res) => {
   const { usuario } = req.body;
-  const user = await Usuario.findOne({ usuario });
+  const user = usuariosDB.find(u => u.usuario === usuario);
+  
   if (!user) return res.status(404).json({ mensaje: "Usuario no encontrado." });
 
-  const secret = speakeasy.generateSecret({ name: `Evren Corp (${user.usuario})` });
-  
+  const secret = speakeasy.generateSecret({
+    name: `Evren Corp (${user.usuario})`
+  });
+
   user.dosPasosSecreto = secret.base32;
-  await user.save();
 
   qrcode.toDataURL(secret.otpauth_url, (err, data_url) => {
     if (err) return res.status(500).json({ mensaje: "Error al generar el Código QR" });
-    res.json({ secretoManual: secret.base32, qrCode: data_url });
+    
+    res.json({
+      secretoManual: secret.base32,
+      qrCode: data_url
+    });
   });
 });
 
-app.post('/api/auth/2fa/verify-setup', async (req, res) => {
+app.post('/api/auth/2fa/verify-setup', (req, res) => {
   const { usuario, token2fa } = req.body;
-  const user = await Usuario.findOne({ usuario });
+  const user = usuariosDB.find(u => u.usuario === usuario);
 
-  if (!user || !user.dosPasosSecreto) return res.status(400).json({ mensaje: "Configuración 2FA no iniciada." });
+  if (!user || !user.dosPasosSecreto) {
+    return res.status(400).json({ mensaje: "Configuración 2FA no iniciada." });
+  }
 
   const verificado = speakeasy.totp.verify({
-    secret: user.dosPasosSecreto, encoding: 'base32', token: token2fa, window: 1 
+    secret: user.dosPasosSecreto,
+    encoding: 'base32',
+    token: token2fa,
+    window: 1 
   });
 
   if (verificado) {
     user.dosPasosActivo = true; 
-    await user.save();
     res.json({ mensaje: "Autenticación de Dos Pasos activada exitosamente." });
   } else {
     res.status(400).json({ mensaje: "Código incorrecto. Intenta de nuevo." });
@@ -125,16 +146,17 @@ app.post('/api/auth/2fa/verify-setup', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 6. RUTAS DE AUTENTICACIÓN (LOGIN)
+// RUTAS DE AUTENTICACIÓN (LOGIN)
 // ==========================================
-app.post('/api/auth/login', async (req, res) => {
-  try {
+app.post('/api/auth/login', (req, res) => {
+  setTimeout(() => {
     const { usuario, contrasena, sucursal, codigo2FA } = req.body;
-    const user = await Usuario.findOne({ usuario });
+    const user = usuariosDB.find(u => u.usuario === usuario);
 
     if (!user) return res.status(401).json({ mensaje: "Usuario o contraseña incorrectos." });
 
     const contrasenaValida = bcrypt.compareSync(String(contrasena), user.contrasenaEncriptada);
+
     if (!contrasenaValida) return res.status(401).json({ mensaje: "Usuario o contraseña incorrectos." });
 
     if (user.nivelAcceso !== "ADMINISTRADOR" && user.sucursal !== sucursal) {
@@ -142,97 +164,158 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (user.dosPasosActivo) {
-      if (!codigo2FA) return res.status(206).json({ requiere2FA: true, mensaje: "Ingresa tu código de Authenticator." });
+      if (!codigo2FA) {
+        return res.status(206).json({ requiere2FA: true, mensaje: "Ingresa tu código de Authenticator." });
+      }
 
       const tokenValido = speakeasy.totp.verify({
-        secret: user.dosPasosSecreto, encoding: 'base32', token: codigo2FA, window: 1
+        secret: user.dosPasosSecreto,
+        encoding: 'base32',
+        token: codigo2FA,
+        window: 1
       });
-      if (!tokenValido) return res.status(401).json({ mensaje: "Código Authenticator incorrecto o expirado." });
+
+      if (!tokenValido) {
+        return res.status(401).json({ mensaje: "Código Authenticator incorrecto o expirado." });
+      }
     }
 
-    const token = jwt.sign({ id: user.usuario, nivel: user.nivelAcceso }, SECRET_KEY, { expiresIn: '8h' });
+    const token = jwt.sign(
+      { id: user.usuario, nivel: user.nivelAcceso }, 
+      SECRET_KEY, 
+      { expiresIn: '8h' } 
+    );
 
     res.json({
       token: token,
-      user: { nombre: user.nombre, nivelAcceso: user.nivelAcceso, organizacion: user.organizacion }
+      user: {
+        nombre: user.nombre,
+        nivelAcceso: user.nivelAcceso,
+        organizacion: user.organizacion,
+        sucursal: user.sucursal
+      }
     });
+  }, 800);
+});
+
+// ==========================================
+// RUTA PARA ADMINISTRACIÓN DE USUARIOS
+// ==========================================
+app.get('/api/usuarios', (req, res) => {
+  const usuariosSeguros = usuariosDB.map(user => {
+    const { contrasena, contrasenaEncriptada, dosPasosSecreto, ...datosPublicos } = user;
+    return datosPublicos;
+  });
+  res.json(usuariosSeguros);
+});
+
+
+// ==========================================
+// 🚀 RUTAS PARA CATÁLOGOS (AHORA EN MONGODB)
+// ==========================================
+app.post('/api/catalogos', async (req, res) => {
+  const { tipo, data } = req.body;
+  if (!tipo || !data) return res.status(400).json({ mensaje: "Faltan datos o el tipo de catálogo." });
+
+  try {
+      await Catalogo.findOneAndUpdate(
+        { tipo: tipo }, 
+        { tipo: tipo, data: data }, 
+        { upsert: true, new: true }
+      );
+      console.log(`[Evren Corp API] Catálogo '${tipo}' blindado en MongoDB.`);
+      res.status(200).json({ exito: true, mensaje: `Catálogo ${tipo} sincronizado en la Nube.` });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: "Error interno del servidor" });
+      console.error("Error al guardar el catálogo en Mongo:", error);
+      res.status(500).json({ mensaje: "Error interno al guardar en el servidor." });
   }
 });
 
-app.get('/api/usuarios', async (req, res) => {
-  const usuarios = await Usuario.find({}, '-contrasenaEncriptada -dosPasosSecreto');
-  res.json(usuarios);
+app.get('/api/catalogos/:tipo', async (req, res) => {
+  try {
+      const catalogo = await Catalogo.findOne({ tipo: req.params.tipo });
+      if (catalogo) {
+          res.status(200).json(catalogo.data);
+      } else {
+          res.status(404).json({ mensaje: "Catálogo no encontrado en MongoDB." });
+      }
+  } catch (error) {
+      res.status(500).json({ error: "Error al buscar catálogo" });
+  }
 });
 
-// ==========================================
-// 🚀 7. RUTAS DE VENTAS Y COTIZACIONES 
-// ==========================================
+
+// ==========================================================================
+// 🚀 RUTAS DE VENTAS Y COTIZACIONES (AHORA EN MONGODB)
+// ==========================================================================
 app.get('/api/ventas', async (req, res) => {
-    const ventas = await Venta.find().sort({ createdAt: -1 });
-    res.json(ventas);
+    try {
+        const ventas = await Venta.find().sort({ _id: -1 }); 
+        res.json(ventas);
+    } catch (error) {
+        res.status(500).json({ error: "Error al obtener ventas" });
+    }
+});
+
+app.get('/api/cotizaciones', async (req, res) => {
+    try {
+        const cotizaciones = await Cotizacion.find().sort({ _id: -1 });
+        res.json(cotizaciones);
+    } catch (error) {
+        res.status(500).json({ error: "Error al obtener cotizaciones" });
+    }
 });
 
 app.post('/api/ventas', async (req, res) => {
     try {
         const nuevaVenta = new Venta(req.body);
         await nuevaVenta.save();
+        console.log("✅ Venta registrada PERMANENTEMENTE en MongoDB:", req.body.idVenta);
         res.status(201).json({ message: "Venta guardada exitosamente", data: nuevaVenta });
     } catch (error) {
-        res.status(500).json({ error: "Error al guardar venta en la nube" });
+        console.error("Error al guardar venta:", error);
+        res.status(500).json({ error: "Error interno del servidor" });
     }
-});
-
-app.get('/api/cotizaciones', async (req, res) => {
-    const cotizaciones = await Cotizacion.find().sort({ createdAt: -1 });
-    res.json(cotizaciones);
 });
 
 app.post('/api/cotizaciones', async (req, res) => {
     try {
         const nuevaCotizacion = new Cotizacion(req.body);
         await nuevaCotizacion.save();
+        console.log("📄 Cotización guardada PERMANENTEMENTE en MongoDB:", req.body.idVenta);
         res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion });
     } catch (error) {
+        console.error("Error al guardar cotización:", error);
         res.status(500).json({ error: "Error al guardar cotización" });
     }
 });
 
-// ==========================================
-// 🚀 8. RUTAS DE TRASPASOS Y CATÁLOGOS
-// ==========================================
+
+// ==========================================================================
+// 🚀 HISTORIAL DE TRASPASOS (AHORA EN MONGODB)
+// ============================================================================
 app.get('/api/traspasos', async (req, res) => {
-  const traspasos = await Traspaso.find().sort({ createdAt: -1 });
-  res.json(traspasos);
+  try {
+      const historial = await Traspaso.find().sort({ _id: -1 });
+      res.json(historial);
+  } catch (error) {
+      res.status(500).json({ error: "Error al obtener traspasos" });
+  }
 });
 
 app.post('/api/traspasos', async (req, res) => {
   try {
-    const nuevoTraspaso = new Traspaso({ fecha: new Date().toLocaleString('es-MX'), ...req.body });
-    await nuevoTraspaso.save();
-    res.status(201).json({ mensaje: 'Traspaso auditado correctamente.', registro: nuevoTraspaso });
+      const registroFinal = { id: Date.now(), fecha: new Date().toLocaleString('es-MX'), ...req.body };
+      const nuevoTraspaso = new Traspaso(registroFinal);
+      await nuevoTraspaso.save();
+      res.status(201).json({ mensaje: 'Traspaso auditado en MongoDB.', registro: registroFinal });
   } catch (error) {
-    res.status(500).json({ error: "Error al guardar traspaso" });
+      res.status(500).json({ error: "Error al guardar traspaso" });
   }
 });
 
-app.post('/api/catalogos', async (req, res) => {
-  const { tipo, data } = req.body;
-  await Catalogo.findOneAndUpdate({ tipo }, { data }, { upsert: true });
-  res.status(200).json({ exito: true, mensaje: `Catálogo ${tipo} actualizado en la nube.` });
-});
-
-app.get('/api/catalogos/:tipo', async (req, res) => {
-  const { tipo } = req.params;
-  const catalogo = await Catalogo.findOne({ tipo });
-  if (catalogo) res.status(200).json(catalogo.data);
-  else res.status(404).json({ mensaje: "Catálogo no encontrado." });
-});
-
 // ==========================================
-// 🚀 INICIAR SERVIDOR
+// INICIAR SERVIDOR
 // ==========================================
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
