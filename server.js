@@ -63,29 +63,32 @@ const Traspaso = mongoose.model('Traspaso', traspasoSchema);
 // ==========================================
 // BASE DE DATOS LOCAL EN MEMORIA (USUARIOS CORREGIDOS)
 // ==========================================
+// ==========================================
+// BASE DE DATOS LOCAL EN MEMORIA (IDs INTERNOS CORRECTOS)
+// ==========================================
 const usuariosDB = [
   { nombre: "LAURA BAUTISTA CONDE", usuario: "LB9748", contrasena: "A7k3$B91d2", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
   { nombre: "LAURA GALEANA VALENCIANA", usuario: "LG220B", contrasena: "4mQ8!2Lp67", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
   { nombre: "JOSE ADRIAN FUENTES MENDIOLA", usuario: "JF2778", contrasena: "9tB1@3kA45", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
   { nombre: "MARCIA ELENA SUAREZ ROSALES", usuario: "MX5476", contrasena: "6f2#p8R19d", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-  { nombre: "EDGAR JAVIER IBARRA FUENTES", usuario: "EI7886", contrasena: "3Z7!L4mK28", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "LESLIE GUADALUPE LUNA VILLEGAS", usuario: "LL3908", contrasena: "P1d9@7tA63", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "MARIANA VANESSA ESPINOSA LAGUNAS", usuario: "ME5986", contrasena: "8b5$R2K41q", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "MARTHA LUCIA URIBE ROSAS", usuario: "MU8925", contrasena: "2Y6!a8C19M", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "MIGUEL RODRIGO FLORES GONZALEZ", usuario: "MF5730", contrasena: "7w3#Q4N25d", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "ABIGAIL ALBERTO VILLANUEVA", usuario: "AA544V", contrasena: "0", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "CARLOS ALEXANDER CALDERON LOPEZ", usuario: "CC534D", contrasena: "1p5!F3tA92", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDAS", nivelAcceso: "ADMINISTRADOR" },
-  { nombre: "GABRIEL CORIA SEGURA", usuario: "GC1480", contrasena: "6A1@q9H37k", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "JESUS GALEANA VALENCIANA", usuario: "JG215P", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "JONATHAN CARRASCO CRUZ", usuario: "JO5517", contrasena: "5u2!R1C9k6", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT5 - EVREN CORP TULANCINGO HGO", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "MARCO ANTONIO LUCERO HERNANDEZ", usuario: "ML069A", contrasena: "8T4@d7M12p", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT9 - EVREN PEDREGAL DE SAN NICOLAS CDMX", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "MAYRA JAZMIN MAR CRUZ", usuario: "MM877B", contrasena: "1Z9$K3b78Q", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
-  { nombre: "SHARON MICHELLE ARROYO MARTINEZ", usuario: "SA9485", contrasena: "6f5!P2A19L", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDAS", nivelAcceso: "USUARIO" },
+  { nombre: "EDGAR JAVIER IBARRA FUENTES", usuario: "EI7886", contrasena: "3Z7!L4mK28", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "LESLIE GUADALUPE LUNA VILLEGAS", usuario: "LL3908", contrasena: "P1d9@7tA63", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MARIANA VANESSA ESPINOSA LAGUNAS", usuario: "ME5986", contrasena: "8b5$R2K41q", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MARTHA LUCIA URIBE ROSAS", usuario: "MU8925", contrasena: "2Y6!a8C19M", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MIGUEL RODRIGO FLORES GONZALEZ", usuario: "MF5730", contrasena: "7w3#Q4N25d", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "ABIGAIL ALBERTO VILLANUEVA", usuario: "AA544V", contrasena: "0", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "CARLOS ALEXANDER CALDERON LOPEZ", usuario: "CC534D", contrasena: "1p5!F3tA92", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "ADMINISTRADOR" },
+  { nombre: "GABRIEL CORIA SEGURA", usuario: "GC1480", contrasena: "6A1@q9H37k", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "JESUS GALEANA VALENCIANA", usuario: "JG215P", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "JONATHAN CARRASCO CRUZ", usuario: "JO5517", contrasena: "5u2!R1C9k6", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT5 - EVREN CORP TULANCINGO HGO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MARCO ANTONIO LUCERO HERNANDEZ", usuario: "ML069A", contrasena: "8T4@d7M12p", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT9 - EVREN PEDREGAL DE SAN NICOLAS CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "MAYRA JAZMIN MAR CRUZ", usuario: "MM877B", contrasena: "1Z9$K3b78Q", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
+  { nombre: "SHARON MICHELLE ARROYO MARTINEZ", usuario: "SA9485", contrasena: "6f5!P2A19L", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
   { nombre: "ANGEL ROSAS HERNANDEZ", usuario: "AR788A", contrasena: "2m8@X7d41R", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
   { nombre: "ESAU ROSALES TINOCO", usuario: "ER1982", contrasena: "7Q3#L6n25A", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
   { nombre: "OWEN GAEL CARBAJAL GONZALEZ", usuario: "OC8710", contrasena: "9A1!k4P82t", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-  { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "kT9a3$M7Q2", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESARIAL", nivelAcceso: "USUARIO" }
+  { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "kT9a3$M7Q2", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESAS", nivelAcceso: "USUARIO" }
 ];
 
 usuariosDB.forEach(user => {
