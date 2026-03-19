@@ -15,9 +15,12 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "framer-motion": "^12.38.0",
     "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^0.577.0",
     "mongoose": "^9.3.1",
     "qrcode": "^1.5.4",
+    "react-hook-form": "^7.71.2",
     "speakeasy": "^2.0.0"
   }
 }

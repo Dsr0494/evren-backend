@@ -7,7 +7,12 @@ const mongoose = require('mongoose');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
 
+// 💡 CORRECCIÓN 1: Faltaba inicializar la aplicación de Express
 const app = express();
+
+// 💡 CORRECCIÓN 2: Límite unificado a 50mb para permitir fotos Base64 sin que el servidor las rechace
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ==========================================
 // 🛡️ 1. GUARDIA DE SEGURIDAD MANUAL (BYPASS TOTAL DE CORS)
@@ -30,13 +35,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '50mb' })); 
-
 // ==========================================
 // 🚀 CONEXIÓN A LA NUBE (MONGODB ATLAS)
 // ==========================================
 if (!process.env.MONGO_URI) {
-  console.error('❌ FATAL: MONGO_URI no está definido en el archivo .env o en las variables de entorno de Render.');
+  console.error('❌ FATAL: MONGO_URI no está definido.');
   process.exit(1);
 }
 
@@ -45,7 +48,7 @@ mongoose.connect(process.env.MONGO_URI)
   .catch(err => console.error('❌ Error fatal al conectar a MongoDB:', err));
 
 // ==========================================
-// 📦 MODELOS DE MONGODB (Esquemas Flexibles)
+// 📦 MODELOS DE MONGODB
 // ==========================================
 const catalogoSchema = new mongoose.Schema({ tipo: String, data: mongoose.Schema.Types.Mixed });
 const Catalogo = mongoose.model('Catalogo', catalogoSchema);
@@ -59,9 +62,16 @@ const Cotizacion = mongoose.model('Cotizacion', cotizacionSchema);
 const traspasoSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
 const Traspaso = mongoose.model('Traspaso', traspasoSchema);
 
+// 🚀 Modelo para Perfiles de Usuario (Fotos)
+const perfilSchema = new mongoose.Schema({
+  usuario: { type: String, required: true, unique: true },
+  avatar: { type: String } // Aquí se guardará el texto gigante Base64
+});
+// Evitamos sobreescribir el modelo si ya existe
+const Perfil = mongoose.models.Perfil || mongoose.model('Perfil', perfilSchema);
 
 // ==========================================
-// BASE DE DATOS LOCAL (CONTRASEÑAS UNIFICADAS Y SUCURSALES EXACTAS)
+// BASE DE DATOS LOCAL (Usuarios)
 // ==========================================
 const usuariosDB = [
   { nombre: "LAURA BAUTISTA CONDE", usuario: "LB9748", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
@@ -97,113 +107,54 @@ usuariosDB.forEach(user => {
 const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
 
 // ==========================================
-// 🚀 RUTAS DE 2FA (GOOGLE AUTHENTICATOR)
+// 🚀 RUTAS DE 2FA Y LOGIN 
 // ==========================================
 app.post('/api/auth/2fa/setup', (req, res) => {
   const { usuario } = req.body;
   const user = usuariosDB.find(u => u.usuario === usuario);
-  
   if (!user) return res.status(404).json({ mensaje: "Usuario no encontrado." });
-
-  const secret = speakeasy.generateSecret({
-    name: `Evren Corp (${user.usuario})`
-  });
-
+  const secret = speakeasy.generateSecret({ name: `Evren Corp (${user.usuario})` });
   user.dosPasosSecreto = secret.base32;
-
   qrcode.toDataURL(secret.otpauth_url, (err, data_url) => {
     if (err) return res.status(500).json({ mensaje: "Error al generar el Código QR" });
-    
-    res.json({
-      secretoManual: secret.base32,
-      qrCode: data_url
-    });
+    res.json({ secretoManual: secret.base32, qrCode: data_url });
   });
 });
 
 app.post('/api/auth/2fa/verify-setup', (req, res) => {
   const { usuario, token2fa } = req.body;
   const user = usuariosDB.find(u => u.usuario === usuario);
-
-  if (!user || !user.dosPasosSecreto) {
-    return res.status(400).json({ mensaje: "Configuración 2FA no iniciada." });
-  }
-
-  const verificado = speakeasy.totp.verify({
-    secret: user.dosPasosSecreto,
-    encoding: 'base32',
-    token: token2fa,
-    window: 1 
-  });
-
+  if (!user || !user.dosPasosSecreto) return res.status(400).json({ mensaje: "Configuración 2FA no iniciada." });
+  const verificado = speakeasy.totp.verify({ secret: user.dosPasosSecreto, encoding: 'base32', token: token2fa, window: 1 });
   if (verificado) {
     user.dosPasosActivo = true; 
     res.json({ mensaje: "Autenticación de Dos Pasos activada exitosamente." });
   } else {
-    res.status(400).json({ mensaje: "Código incorrecto. Intenta de nuevo." });
+    res.status(400).json({ mensaje: "Código incorrecto." });
   }
 });
 
-// ==========================================
-// RUTAS DE AUTENTICACIÓN (LOGIN BLINDADO)
-// ==========================================
 app.post('/api/auth/login', (req, res) => {
   setTimeout(() => {
     const { usuario, contrasena, sucursal, codigo2FA } = req.body;
-    
-    // 🛡️ Blindaje 1: Quitamos espacios fantasma y forzamos mayúsculas
     const cleanUser = String(usuario).trim().toUpperCase();
     const user = usuariosDB.find(u => u.usuario === cleanUser);
-
     if (!user) return res.status(401).json({ mensaje: "Usuario no encontrado." });
-
-    // 🛡️ Blindaje 2: Comparamos la contraseña eliminando espacios accidentales
     const contrasenaValida = bcrypt.compareSync(String(contrasena).trim(), user.contrasenaEncriptada);
-
     if (!contrasenaValida) return res.status(401).json({ mensaje: "Contraseña incorrecta." });
-
     if (user.nivelAcceso !== "ADMINISTRADOR" && user.sucursal !== sucursal) {
       return res.status(403).json({ mensaje: `Acceso denegado al módulo ${sucursal}` });
     }
-
     if (user.dosPasosActivo) {
-      if (!codigo2FA) {
-        return res.status(206).json({ requiere2FA: true, mensaje: "Ingresa tu código de Authenticator." });
-      }
-
-      const tokenValido = speakeasy.totp.verify({
-        secret: user.dosPasosSecreto,
-        encoding: 'base32',
-        token: codigo2FA,
-        window: 1
-      });
-
-      if (!tokenValido) {
-        return res.status(401).json({ mensaje: "Código Authenticator incorrecto o expirado." });
-      }
+      if (!codigo2FA) return res.status(206).json({ requiere2FA: true, mensaje: "Ingresa tu código de Authenticator." });
+      const tokenValido = speakeasy.totp.verify({ secret: user.dosPasosSecreto, encoding: 'base32', token: codigo2FA, window: 1 });
+      if (!tokenValido) return res.status(401).json({ mensaje: "Código Authenticator incorrecto o expirado." });
     }
-
-    const token = jwt.sign(
-      { id: user.usuario, nivel: user.nivelAcceso }, 
-      SECRET_KEY, 
-      { expiresIn: '8h' } 
-    );
-
-    res.json({
-      token: token,
-      user: {
-        nombre: user.nombre,
-        nivelAcceso: user.nivelAcceso,
-        organizacion: user.organizacion,
-        sucursal: user.sucursal
-      }
-    });
+    const token = jwt.sign({ id: user.usuario, nivel: user.nivelAcceso }, SECRET_KEY, { expiresIn: '8h' });
+    res.json({ token: token, user: { nombre: user.nombre, nivelAcceso: user.nivelAcceso, organizacion: user.organizacion, sucursal: user.sucursal, dosPasosActivo: user.dosPasosActivo } });
   }, 800);
 });
 
-// ==========================================
-// RUTA PARA ADMINISTRACIÓN DE USUARIOS
-// ==========================================
 app.get('/api/usuarios', (req, res) => {
   const usuariosSeguros = usuariosDB.map(user => {
     const { contrasena, contrasenaEncriptada, dosPasosSecreto, ...datosPublicos } = user;
@@ -213,111 +164,91 @@ app.get('/api/usuarios', (req, res) => {
 });
 
 // ==========================================
-// 🚀 RUTAS PARA CATÁLOGOS (AHORA EN MONGODB)
+// 📸 🚀 RUTAS UNIFICADAS DE PERFIL Y AVATARES (MONGODB)
+// ==========================================
+app.post('/api/perfil/avatar', async (req, res) => {
+  try {
+    const { usuario, avatar } = req.body;
+    if (!usuario) return res.status(400).json({ mensaje: "Falta el usuario" });
+
+    await Perfil.findOneAndUpdate(
+      { usuario: String(usuario).toUpperCase() },
+      { usuario: String(usuario).toUpperCase(), avatar: avatar || "" },
+      { upsert: true, new: true }
+    );
+
+    res.status(200).json({ mensaje: "Avatar actualizado exitosamente en MongoDB" });
+  } catch (error) {
+    console.error("Error guardando avatar:", error);
+    res.status(500).json({ mensaje: "Error interno del servidor" });
+  }
+});
+
+app.get('/api/perfil/avatar/:usuario', async (req, res) => {
+  try {
+    const { usuario } = req.params;
+    const perfil = await Perfil.findOne({ usuario: String(usuario).toUpperCase() });
+    
+    if (!perfil || !perfil.avatar) {
+      return res.status(404).json({ mensaje: "No hay foto" });
+    }
+    
+    res.status(200).json({ avatar: perfil.avatar });
+  } catch (error) {
+    console.error("Error obteniendo avatar:", error);
+    res.status(500).json({ mensaje: "Error interno" });
+  }
+});
+
+// ==========================================
+// 🚀 RUTAS DE CATÁLOGOS, VENTAS Y TRASPASOS
 // ==========================================
 app.post('/api/catalogos', async (req, res) => {
   const { tipo, data } = req.body;
   if (!tipo || !data) return res.status(400).json({ mensaje: "Faltan datos o el tipo de catálogo." });
-
   try {
-      await Catalogo.findOneAndUpdate(
-        { tipo: tipo }, 
-        { tipo: tipo, data: data }, 
-        { upsert: true, new: true }
-      );
-      console.log(`[Evren Corp API] Catálogo '${tipo}' blindado en MongoDB.`);
+      await Catalogo.findOneAndUpdate({ tipo: tipo }, { tipo: tipo, data: data }, { upsert: true, new: true });
       res.status(200).json({ exito: true, mensaje: `Catálogo ${tipo} sincronizado en la Nube.` });
-  } catch (error) {
-      console.error("Error al guardar el catálogo en Mongo:", error);
-      res.status(500).json({ mensaje: "Error interno al guardar en el servidor." });
-  }
+  } catch (error) { res.status(500).json({ mensaje: "Error interno al guardar en el servidor." }); }
 });
 
 app.get('/api/catalogos/:tipo', async (req, res) => {
   try {
       const catalogo = await Catalogo.findOne({ tipo: req.params.tipo });
-      if (catalogo) {
-          res.status(200).json(catalogo.data);
-      } else {
-          res.status(404).json({ mensaje: "Catálogo no encontrado en MongoDB." });
-      }
-  } catch (error) {
-      res.status(500).json({ error: "Error al buscar catálogo" });
-  }
+      if (catalogo) res.status(200).json(catalogo.data);
+      else res.status(404).json({ mensaje: "Catálogo no encontrado." });
+  } catch (error) { res.status(500).json({ error: "Error al buscar catálogo" }); }
 });
 
-// ==========================================================================
-// 🚀 RUTAS DE VENTAS Y COTIZACIONES (AHORA EN MONGODB)
-// ==========================================================================
 app.get('/api/ventas', async (req, res) => {
-    try {
-        const ventas = await Venta.find().sort({ _id: -1 }); 
-        res.json(ventas);
-    } catch (error) {
-        res.status(500).json({ error: "Error al obtener ventas" });
-    }
+  try { const ventas = await Venta.find().sort({ _id: -1 }); res.json(ventas); } 
+  catch (error) { res.status(500).json({ error: "Error al obtener ventas" }); }
 });
 
 app.get('/api/cotizaciones', async (req, res) => {
-    try {
-        const cotizaciones = await Cotizacion.find().sort({ _id: -1 });
-        res.json(cotizaciones);
-    } catch (error) {
-        res.status(500).json({ error: "Error al obtener cotizaciones" });
-    }
+  try { const cotizaciones = await Cotizacion.find().sort({ _id: -1 }); res.json(cotizaciones); } 
+  catch (error) { res.status(500).json({ error: "Error al obtener cotizaciones" }); }
 });
 
 app.post('/api/ventas', async (req, res) => {
-    try {
-        const nuevaVenta = new Venta(req.body);
-        await nuevaVenta.save();
-        console.log("✅ Venta registrada PERMANENTEMENTE en MongoDB:", req.body.idVenta);
-        res.status(201).json({ message: "Venta guardada exitosamente", data: nuevaVenta });
-    } catch (error) {
-        console.error("Error al guardar venta:", error);
-        res.status(500).json({ error: "Error interno del servidor" });
-    }
+  try { const nuevaVenta = new Venta(req.body); await nuevaVenta.save(); res.status(201).json({ message: "Venta guardada", data: nuevaVenta }); } 
+  catch (error) { res.status(500).json({ error: "Error al guardar venta" }); }
 });
 
 app.post('/api/cotizaciones', async (req, res) => {
-    try {
-        const nuevaCotizacion = new Cotizacion(req.body);
-        await nuevaCotizacion.save();
-        console.log("📄 Cotización guardada PERMANENTEMENTE en MongoDB:", req.body.idVenta);
-        res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion });
-    } catch (error) {
-        console.error("Error al guardar cotización:", error);
-        res.status(500).json({ error: "Error al guardar cotización" });
-    }
+  try { const nuevaCotizacion = new Cotizacion(req.body); await nuevaCotizacion.save(); res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion }); } 
+  catch (error) { res.status(500).json({ error: "Error al guardar cotización" }); }
 });
 
-// ==========================================================================
-// 🚀 HISTORIAL DE TRASPASOS (AHORA EN MONGODB)
-// ============================================================================
 app.get('/api/traspasos', async (req, res) => {
-  try {
-      const historial = await Traspaso.find().sort({ _id: -1 });
-      res.json(historial);
-  } catch (error) {
-      res.status(500).json({ error: "Error al obtener traspasos" });
-  }
+  try { const historial = await Traspaso.find().sort({ _id: -1 }); res.json(historial); } 
+  catch (error) { res.status(500).json({ error: "Error al obtener traspasos" }); }
 });
 
 app.post('/api/traspasos', async (req, res) => {
-  try {
-      const registroFinal = { id: Date.now(), fecha: new Date().toLocaleString('es-MX'), ...req.body };
-      const nuevoTraspaso = new Traspaso(registroFinal);
-      await nuevoTraspaso.save();
-      res.status(201).json({ mensaje: 'Traspaso auditado en MongoDB.', registro: registroFinal });
-  } catch (error) {
-      res.status(500).json({ error: "Error al guardar traspaso" });
-  }
+  try { const registroFinal = { id: Date.now(), fecha: new Date().toLocaleString('es-MX'), ...req.body }; const nuevoTraspaso = new Traspaso(registroFinal); await nuevoTraspaso.save(); res.status(201).json({ mensaje: 'Traspaso auditado.', registro: registroFinal }); } 
+  catch (error) { res.status(500).json({ error: "Error al guardar traspaso" }); }
 });
 
-// ==========================================
-// INICIAR SERVIDOR
-// ==========================================
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor Backend de Evren Corp corriendo en el puerto ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Servidor Backend corriendo en el puerto ${PORT}`));
