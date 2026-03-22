@@ -13,6 +13,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
+    "csv-parser": "^3.2.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "framer-motion": "^12.38.0",
@@ -20,6 +21,7 @@
     "lucide-react": "^0.577.0",
     "mongodb": "3.6",
     "mongoose": "^9.3.1",
+    "multer": "^2.1.1",
     "qrcode": "^1.5.4",
     "react-hook-form": "^7.71.2",
     "speakeasy": "^2.0.0"

@@ -7,7 +7,6 @@ const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose'); 
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
-
 const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
@@ -124,17 +123,10 @@ app.post('/api/auth/login', async (req, res) => {
     const contrasenaValida = bcrypt.compareSync(String(contrasena).trim(), user.contrasenaEncriptada);
     if (!contrasenaValida) return res.status(401).json({ mensaje: "Contraseña incorrecta." });
     
-    // 🌟 GUARDIA DE SEGURIDAD ESTRICTO Y CORREGIDO
+    // 🌟 GUARDIA DE SEGURIDAD ACTUALIZADO: Permite el paso directo a los de Mesa de Control
     if (user.nivelAcceso !== "ADMINISTRADOR" && user.sucursal !== sucursal) {
-      let accesoPermitido = false;
-
-      // Mapeo estricto: Cada mesa solo puede entrar por su botón correspondiente en el Login
-      if (user.sucursal === "MESA DE CONTROL TIENDAS" && sucursal === "TIENDA") accesoPermitido = true;
-      else if (user.sucursal === "MESA DE CONTROL TELEMARKETING" && sucursal === "TELEMARKETING") accesoPermitido = true;
-      else if (user.sucursal === "MESA DE CONTROL EMPRESARIAL" && sucursal === "EMPRESAS") accesoPermitido = true;
-
-      // Si no hace match exacto, lo rebotamos
-      if (!accesoPermitido) {
+      const esMesaControl = user.sucursal && user.sucursal.includes("MESA DE CONTROL");
+      if (!esMesaControl) {
         return res.status(403).json({ mensaje: `Acceso denegado al módulo ${sucursal}` });
       }
     }
@@ -179,50 +171,6 @@ app.post('/api/auth/2fa/disable', async (req, res) => {
     res.json({ mensaje: "Seguridad 2FA desactivada." });
   } catch (error) { 
     res.status(500).json({ mensaje: "Error del servidor." }); 
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { usuario, contrasena, sucursal, codigo2FA } = req.body;
-    const cleanUser = String(usuario).trim().toUpperCase();
-    
-    const user = await Usuario.findOne({ usuario: cleanUser, activo: true });
-    
-    if (!user) return res.status(401).json({ mensaje: "Usuario no encontrado o inactivo." });
-    
-    const contrasenaValida = bcrypt.compareSync(String(contrasena).trim(), user.contrasenaEncriptada);
-    if (!contrasenaValida) return res.status(401).json({ mensaje: "Contraseña incorrecta." });
-    
-    // 🌟 GUARDIA DE SEGURIDAD ACTUALIZADO: Permite el paso directo a los de Mesa de Control
-    if (user.nivelAcceso !== "ADMINISTRADOR" && user.sucursal !== sucursal) {
-      const esMesaControl = user.sucursal && user.sucursal.includes("MESA DE CONTROL");
-      if (!esMesaControl) {
-        return res.status(403).json({ mensaje: `Acceso denegado al módulo ${sucursal}` });
-      }
-    }
-    
-    if (user.dosPasosActivo) {
-      if (!codigo2FA) return res.status(206).json({ requiere2FA: true, mensaje: "Ingresa tu código de Authenticator." });
-      const tokenValido = speakeasy.totp.verify({ secret: user.dosPasosSecreto, encoding: 'base32', token: codigo2FA, window: 1 });
-      if (!tokenValido) return res.status(401).json({ mensaje: "Código Authenticator incorrecto o expirado." });
-    }
-    
-    const token = jwt.sign({ id: user.usuario, nivel: user.nivelAcceso }, SECRET_KEY, { expiresIn: '8h' });
-    
-    res.json({ 
-      token: token, 
-      user: { 
-        nombre: user.nombre, 
-        nivelAcceso: user.nivelAcceso, 
-        organizacion: user.organizacion, 
-        sucursal: user.sucursal, 
-        dosPasosActivo: user.dosPasosActivo 
-      } 
-    });
-  } catch (error) {
-    console.error("Error en login:", error);
-    res.status(500).json({ mensaje: "Error interno del servidor." });
   }
 });
 
@@ -314,8 +262,6 @@ app.delete('/api/usuarios/:id', async (req, res) => {
 // ==========================================
 // 📸 RUTAS DE PERFIL, AVATARES Y PASSWORD
 // ==========================================
-
-// CAMBIAR CONTRASEÑA DESDE EL PERFIL
 app.post('/api/perfil/password', async (req, res) => {
   try {
     const { usuario, passActual, passNueva } = req.body;
