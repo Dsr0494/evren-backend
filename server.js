@@ -444,7 +444,10 @@ const sembrarUsuariosIniciales = async () => {
         { nombre: "MIGUEL RODRIGO FLORES GONZALEZ", usuario: "MF5730", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
         { nombre: "ABIGAIL ALBERTO VILLANUEVA", usuario: "AA544V", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
         { nombre: "CARLOS ALEXANDER CALDERON LOPEZ", usuario: "CC534D", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "ADMINISTRADOR" },
+        
+        // TU USUARIO ADMINISTRADOR (Corregido a MESA DE CONTROL)
+        { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "ADMINISTRADOR" },
+        
         { nombre: "GABRIEL CORIA SEGURA", usuario: "GC1480", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
         { nombre: "JESUS GALEANA VALENCIANA", usuario: "JG215P", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
         { nombre: "JONATHAN CARRASCO CRUZ", usuario: "JO5517", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT5 - EVREN CORP TULANCINGO HGO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
@@ -454,7 +457,11 @@ const sembrarUsuariosIniciales = async () => {
         { nombre: "ANGEL ROSAS HERNANDEZ", usuario: "AR788A", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
         { nombre: "ESAU ROSALES TINOCO", usuario: "ER1982", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
         { nombre: "OWEN GAEL CARBAJAL GONZALEZ", usuario: "OC8710", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-        { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "12345", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESAS", nivelAcceso: "USUARIO" }
+        { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "12345", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESAS", nivelAcceso: "USUARIO" },
+        
+        // TUS USUARIOS DE MESA DE CONTROL ADICIONALES
+        { nombre: "USUARIO MESA 1", usuario: "MC001", contrasena: "12345", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "USUARIO" },
+        { nombre: "USUARIO MESA 2", usuario: "MC002", contrasena: "12345", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "USUARIO" }
       ];
 
       for (let u of usuariosIniciales) {
