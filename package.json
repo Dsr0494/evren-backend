@@ -18,6 +18,7 @@
     "framer-motion": "^12.38.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.577.0",
+    "mongodb": "3.6",
     "mongoose": "^9.3.1",
     "qrcode": "^1.5.4",
     "react-hook-form": "^7.71.2",
