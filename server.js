@@ -430,9 +430,7 @@ app.post('/api/traspasos', async (req, res) => {
 // ==========================================================================
 const sembrarUsuariosIniciales = async () => {
   try {
-    const count = await Usuario.countDocuments();
-    if (count <= 5) {
-      console.log("🌱 Inyectando usuarios maestros en la colección...");
+      console.log("🌱 Forzando sincronización de usuarios maestros...");
       
       const usuariosIniciales = [
         { nombre: "LAURA BAUTISTA CONDE", usuario: "LB9748", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
@@ -460,14 +458,18 @@ const sembrarUsuariosIniciales = async () => {
       ];
 
       for (let u of usuariosIniciales) {
-         const existe = await Usuario.findOne({ usuario: u.usuario });
-         if (!existe) {
-            u.contrasenaEncriptada = bcrypt.hashSync(String(u.contrasena), 10);
-            await Usuario.create(u);
-         }
+         // Hasheamos la contraseña de forma segura
+         u.contrasenaEncriptada = bcrypt.hashSync(String(u.contrasena), 10);
+         
+         // upsert: true -> Si el usuario existe, le actualiza la contraseña a la correcta. Si no existe, lo crea.
+         await Usuario.findOneAndUpdate(
+            { usuario: u.usuario }, 
+            { $set: u }, 
+            { upsert: true, new: true }
+         );
       }
-      console.log("✅ Usuarios iniciales sembrados con éxito.");
-    }
+      console.log("✅ Usuarios iniciales sincronizados y reseteados con éxito.");
+
   } catch (error) {
     console.error("❌ Error sembrando usuarios:", error);
   }
