@@ -15,6 +15,7 @@ const upload = multer({ dest: 'uploads/' });
 const express = require('express');
 const app = express();
 
+// 🚀 FIX CRÍTICO: Límite ampliado a 50MB para soportar múltiples PDFs en Base64
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -48,7 +49,10 @@ const Catalogo = mongoose.model('Catalogo', catalogoSchema);
 const ventaSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
 const Venta = mongoose.model('Venta', ventaSchema);
 
-const cotizacionSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
+// Definimos explícitamente el id personalizado para las cotizaciones
+const cotizacionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }
+}, { strict: false, timestamps: true });
 const Cotizacion = mongoose.model('Cotizacion', cotizacionSchema);
 
 const traspasoSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
@@ -123,7 +127,6 @@ app.post('/api/auth/login', async (req, res) => {
     const contrasenaValida = bcrypt.compareSync(String(contrasena).trim(), user.contrasenaEncriptada);
     if (!contrasenaValida) return res.status(401).json({ mensaje: "Contraseña incorrecta." });
     
-    // 🌟 GUARDIA DE SEGURIDAD ACTUALIZADO: Permite el paso directo a los de Mesa de Control
     if (user.nivelAcceso !== "ADMINISTRADOR" && user.sucursal !== sucursal) {
       const esMesaControl = user.sucursal && user.sucursal.includes("MESA DE CONTROL");
       if (!esMesaControl) {
@@ -155,7 +158,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// DESACTIVAR 2FA DESDE EL PERFIL
 app.post('/api/auth/2fa/disable', async (req, res) => {
   try {
     const { usuario, contrasena } = req.body;
@@ -179,84 +181,49 @@ app.post('/api/auth/2fa/disable', async (req, res) => {
 // ==========================================================================
 app.get('/api/usuarios', async (req, res) => {
   try {
-    const usuarios = await Usuario.find({ activo: true })
-                                  .select('-contrasenaEncriptada -dosPasosSecreto')
-                                  .sort({ fechaCreacion: -1 });
+    const usuarios = await Usuario.find({ activo: true }).select('-contrasenaEncriptada -dosPasosSecreto').sort({ fechaCreacion: -1 });
     res.json(usuarios);
-  } catch (error) {
-    res.status(500).json({ mensaje: "Error al obtener usuarios." });
-  }
+  } catch (error) { res.status(500).json({ mensaje: "Error al obtener usuarios." }); }
 });
 
 app.post('/api/usuarios', async (req, res) => {
   try {
     const { nombre, usuario, contrasena, categoria, organizacion, sucursal, nivelAcceso } = req.body;
-
     const existe = await Usuario.findOne({ usuario: String(usuario).toUpperCase() });
-    if (existe) {
-      return res.status(400).json({ mensaje: "El ID de usuario ya está en uso." });
-    }
+    if (existe) return res.status(400).json({ mensaje: "El ID de usuario ya está en uso." });
 
     const contrasenaEncriptada = bcrypt.hashSync(String(contrasena).trim(), 10);
-
-    const nuevoUsuario = new Usuario({
-      nombre, usuario, contrasenaEncriptada, categoria, organizacion, sucursal, nivelAcceso
-    });
-
+    const nuevoUsuario = new Usuario({ nombre, usuario, contrasenaEncriptada, categoria, organizacion, sucursal, nivelAcceso });
     await nuevoUsuario.save();
     
     const usuarioSafe = nuevoUsuario.toObject();
     delete usuarioSafe.contrasenaEncriptada;
     delete usuarioSafe.dosPasosSecreto;
-
     res.status(201).json(usuarioSafe);
-  } catch (error) {
-    console.error("Error creando usuario:", error);
-    res.status(500).json({ mensaje: "Error al crear el usuario." });
-  }
+  } catch (error) { res.status(500).json({ mensaje: "Error al crear el usuario." }); }
 });
 
 app.put('/api/usuarios/:id', async (req, res) => {
   try {
     const { nombre, contrasena, categoria, organizacion, sucursal, nivelAcceso } = req.body;
     const usuarioId = String(req.params.id).toUpperCase();
-
     const updateData = { nombre, categoria, organizacion, sucursal, nivelAcceso };
 
-    if (contrasena && contrasena.trim() !== "") {
-      updateData.contrasenaEncriptada = bcrypt.hashSync(String(contrasena).trim(), 10);
-    }
+    if (contrasena && contrasena.trim() !== "") updateData.contrasenaEncriptada = bcrypt.hashSync(String(contrasena).trim(), 10);
 
-    const usuarioActualizado = await Usuario.findOneAndUpdate(
-      { usuario: usuarioId },
-      { $set: updateData },
-      { new: true } 
-    ).select('-contrasenaEncriptada -dosPasosSecreto');
-
+    const usuarioActualizado = await Usuario.findOneAndUpdate( { usuario: usuarioId }, { $set: updateData }, { new: true } ).select('-contrasenaEncriptada -dosPasosSecreto');
     if (!usuarioActualizado) return res.status(404).json({ mensaje: "Usuario no encontrado." });
-
     res.json(usuarioActualizado);
-  } catch (error) {
-    res.status(500).json({ mensaje: "Error al actualizar el usuario." });
-  }
+  } catch (error) { res.status(500).json({ mensaje: "Error al actualizar el usuario." }); }
 });
 
 app.delete('/api/usuarios/:id', async (req, res) => {
   try {
     const usuarioId = String(req.params.id).toUpperCase();
-    
-    const usuarioEliminado = await Usuario.findOneAndUpdate(
-      { usuario: usuarioId },
-      { $set: { activo: false } },
-      { new: true }
-    );
-
+    const usuarioEliminado = await Usuario.findOneAndUpdate( { usuario: usuarioId }, { $set: { activo: false } }, { new: true } );
     if (!usuarioEliminado) return res.status(404).json({ mensaje: "Usuario no encontrado." });
-
     res.json({ mensaje: "Usuario eliminado correctamente." });
-  } catch (error) {
-    res.status(500).json({ mensaje: "Error al eliminar el usuario." });
-  }
+  } catch (error) { res.status(500).json({ mensaje: "Error al eliminar el usuario." }); }
 });
 
 // ==========================================
@@ -308,9 +275,63 @@ app.get('/api/catalogos/:tipo', async (req, res) => {
 });
 
 app.get('/api/ventas', async (req, res) => { try { const ventas = await Venta.find().sort({ _id: -1 }); res.json(ventas); } catch (error) { res.status(500).json({ error: "Error al obtener ventas" }); } });
-app.get('/api/cotizaciones', async (req, res) => { try { const cotizaciones = await Cotizacion.find().sort({ _id: -1 }); res.json(cotizaciones); } catch (error) { res.status(500).json({ error: "Error al obtener cotizaciones" }); } });
+
 app.post('/api/ventas', async (req, res) => { try { const nuevaVenta = new Venta(req.body); await nuevaVenta.save(); res.status(201).json({ message: "Venta guardada", data: nuevaVenta }); } catch (error) { res.status(500).json({ error: "Error al guardar venta" }); } });
-app.post('/api/cotizaciones', async (req, res) => { try { const nuevaCotizacion = new Cotizacion(req.body); await nuevaCotizacion.save(); res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion }); } catch (error) { res.status(500).json({ error: "Error al guardar cotización" }); } });
+
+// ==========================================
+// 🚀 RUTAS DE COTIZACIONES (MESA DE CONTROL)
+// ==========================================
+app.get('/api/cotizaciones', async (req, res) => { 
+  try { const cotizaciones = await Cotizacion.find().sort({ _id: -1 }); res.json(cotizaciones); } 
+  catch (error) { res.status(500).json({ error: "Error al obtener cotizaciones" }); } 
+});
+
+app.post('/api/cotizaciones', async (req, res) => { 
+  try { 
+    // Usamos el ID custom (ej. C-12345) como llave única
+    const nuevaCotizacion = new Cotizacion({ ...req.body, id: req.body.id || req.body.folio }); 
+    await nuevaCotizacion.save(); 
+    res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion }); 
+  } 
+  catch (error) { res.status(500).json({ error: "Error al guardar cotización" }); } 
+});
+
+// 🚀 FIX: RUTAR PARA ACTUALIZAR COTIZACIONES / MESA DE CONTROL (A PRUEBA DE BALAS)
+app.put('/api/cotizaciones/:id', async (req, res) => {
+  try {
+      const { id } = req.params;
+      
+      // Creamos un array de condiciones de búsqueda
+      let condicionesBusqueda = [
+          { id: id },
+          { folio: id },
+          { 'datos.id': id },
+          { 'datos.folio': id }
+      ];
+      
+      // Si el ID tiene 24 caracteres hexadecimales (es un ObjectId válido de Mongo)
+      if (/^[0-9a-fA-F]{24}$/.test(id)) {
+          condicionesBusqueda.push({ _id: new mongoose.Types.ObjectId(id) });
+      }
+
+      // Usamos $or para buscar por cualquiera de las condiciones
+      const cotizacionActualizada = await Cotizacion.findOneAndUpdate(
+          { $or: condicionesBusqueda },
+          { $set: req.body },
+          { new: true }
+      );
+
+      if (!cotizacionActualizada) {
+          return res.status(404).json({ mensaje: "Trámite no encontrado en la base de datos." });
+      }
+
+      res.status(200).json({ message: "Cotización actualizada exitosamente", data: cotizacionActualizada });
+  } catch (error) {
+      console.error("Error al actualizar cotización:", error);
+      res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
 
 // ==========================================
 // 📦 RUTAS DE INVENTARIO (NUBE)
@@ -425,6 +446,20 @@ app.post('/api/traspasos', async (req, res) => {
   catch (error) { res.status(500).json({ error: "Error al guardar traspaso" }); }
 });
 
+// ==========================================
+// 🛡️ MANEJO DE ERRORES GLOBALES (PAYLOAD TOO LARGE)
+// ==========================================
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') {
+    console.error("Payload too large detectado.");
+    return res.status(413).json({ 
+      error: "El archivo enviado es demasiado pesado.", 
+      mensaje: "Los documentos PDF/Imágenes superan el límite del servidor. Por favor sube archivos más ligeros o comprimidos." 
+    });
+  }
+  next(err);
+});
+
 // ==========================================================================
 // 🚀 INICIALIZACIÓN DE LA BASE DE DATOS (MIGRACIÓN ÚNICA)
 // ==========================================================================
@@ -445,8 +480,7 @@ const sembrarUsuariosIniciales = async () => {
         { nombre: "ABIGAIL ALBERTO VILLANUEVA", usuario: "AA544V", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
         { nombre: "CARLOS ALEXANDER CALDERON LOPEZ", usuario: "CC534D", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
         
-        // TU USUARIO ADMINISTRADOR (Corregido a MESA DE CONTROL)
-        { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "ADMINISTRADOR" },
+        { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "MESA DE CONTROL", nivelAcceso: "ADMINISTRADOR" },
         
         { nombre: "GABRIEL CORIA SEGURA", usuario: "GC1480", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
         { nombre: "JESUS GALEANA VALENCIANA", usuario: "JG215P", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
@@ -459,16 +493,12 @@ const sembrarUsuariosIniciales = async () => {
         { nombre: "OWEN GAEL CARBAJAL GONZALEZ", usuario: "OC8710", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
         { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "12345", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESAS", nivelAcceso: "USUARIO" },
         
-        // TUS USUARIOS DE MESA DE CONTROL ADICIONALES
         { nombre: "USUARIO MESA 1", usuario: "MC001", contrasena: "12345", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "USUARIO" },
         { nombre: "USUARIO MESA 2", usuario: "MC002", contrasena: "12345", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "USUARIO" }
       ];
 
       for (let u of usuariosIniciales) {
-         // Hasheamos la contraseña de forma segura
          u.contrasenaEncriptada = bcrypt.hashSync(String(u.contrasena), 10);
-         
-         // upsert: true -> Si el usuario existe, le actualiza la contraseña a la correcta. Si no existe, lo crea.
          await Usuario.findOneAndUpdate(
             { usuario: u.usuario }, 
             { $set: u }, 
@@ -492,15 +522,12 @@ if (!process.env.MONGO_URI) {
 
 const arrancarServidor = async () => {
   try {
-    // 1. Primero esperamos a que la base de datos se conecte
     console.log('Conectando a MongoDB Atlas...');
     await mongoose.connect(process.env.MONGO_URI);
     console.log('🔥 ¡Bóveda conectada! MongoDB Atlas en línea.');
 
-    // 2. Una vez conectados, sembramos los usuarios
     await sembrarUsuariosIniciales();
 
-    // 3. Finalmente, levantamos el servidor Express
     const PORT = process.env.PORT || 4000;
     app.listen(PORT, () => console.log(`🚀 Servidor Backend corriendo en el puerto ${PORT}`));
 
