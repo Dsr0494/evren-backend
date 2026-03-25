@@ -1,405 +1,643 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
-import { usePricing } from './usePricing';
-import { 
-  CONDICIONES_CREDITO, defaultPlanesEstandar, defaultTelefonosEstandar, TIPOS_VENTA_ESTANDAR, 
-  PLANES_EMPRESARIAL, CATALOGO_TELEFONOS_EMPRESARIAL, TIPOS_VENTA_EMPRESARIAL
-} from '../config/catalogs';
-import { 
-  SEGUROS_ATT, getCatalog, getPlazosDisponibles
-} from '../utils/ventasHelpers';
+require('dotenv').config();
+const dns = require('node:dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs'); 
+const mongoose = require('mongoose'); 
+const speakeasy = require('speakeasy');
+const qrcode = require('qrcode');
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://evren-backend.onrender.com/api';
-
-const CATALOGO_TITANIO_FALLBACK = [];
-const PLAN_TITANIO_FALLBACK = { id: "PLAN_TITANIO_42", nombre: "Titanio (42GB)", parrilla: "TITANIO", matrizKey: "TITANIO", importe: 1599 };
-
-const CATALOGO_MISEL_FALLBACK = [];
-const PLAN_MISEL_FALLBACK = { id: "PLAN_MI_SELECCION", nombre: "Mi Selección (Black 42GB)", parrilla: "MI_SELECCION", matrizKey: "MI_SELECCION", importe: 825 };
-
-export const useGestorVentas = ({ session, modoCotizador, showToast, setVistaActiva }) => {
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [folioId, setFolioId] = useState("");
-  const [ejecutivosTMK, setEjecutivosTMK] = useState([]);
-
-  const [catalogoEquipos, setCatalogoEquipos] = useState([]);
-  const [catalogoTitanio, setCatalogoTitanio] = useState(CATALOGO_TITANIO_FALLBACK); 
-  const [catalogoMiSeleccion, setCatalogoMiSeleccion] = useState(CATALOGO_MISEL_FALLBACK);
-  const [catalogoPlanes, setCatalogoPlanes] = useState([]);
-  const [isCatalogLoading, setIsCatalogLoading] = useState(true);
-  
-  const isAdmin = String(session?.nivel || "").toUpperCase().includes("ADMIN");
-  const esEmpresarial = session?.sucursalEntrada === "EMPRESAS";
-  const esTelemarketing = session?.sucursalEntrada === "TELEMARKETING"; 
-  const esTienda = session?.sucursalEntrada === "TIENDAS" || session?.sucursalEntrada === "TIENDA";
-  const sucursalRealUsuario = String(session?.org || session?.sucursalEntrada || "").toUpperCase();
-  const nombreVendedorSeguro = String(session?.nombre || "Usuario").trim().toUpperCase();
-
-  useEffect(() => { setEjecutivosTMK(["OWEN GAEL CARBAJAL GONZALEZ", "ESAU ROSALES TINOCO", "ANGEL ROSAS HERNANDEZ", "EJECUTIVO PRUEBA"]); }, []);
-
-  useEffect(() => {
-    const fetchCatalogos = async () => {
-      setIsCatalogLoading(true);
-      try {
-        const [resEq, resTit, resPlan, resMiSel] = await Promise.all([
-          fetch(`${API_URL}/catalogos/evren_telefonos_estandar`, { cache: 'no-store' }),
-          fetch(`${API_URL}/catalogos/evren_telefonos_titanio`, { cache: 'no-store' }),
-          fetch(`${API_URL}/catalogos/evren_planes_estandar`, { cache: 'no-store' }),
-          fetch(`${API_URL}/catalogos/evren_telefonos_mi_seleccion`, { cache: 'no-store' })
-        ]);
-        if (resEq.ok) { const data = await resEq.json(); if (data && data.length > 0) setCatalogoEquipos(data); else setCatalogoEquipos(defaultTelefonosEstandar); } else setCatalogoEquipos(defaultTelefonosEstandar);
-        if (resTit.ok) { const data = await resTit.json(); if (data && data.length > 0) setCatalogoTitanio(data); else setCatalogoTitanio(CATALOGO_TITANIO_FALLBACK); } else setCatalogoTitanio(CATALOGO_TITANIO_FALLBACK);
-        if (resPlan.ok) { const data = await resPlan.json(); if (data && data.length > 0) setCatalogoPlanes(data); else setCatalogoPlanes(defaultPlanesEstandar); } else setCatalogoPlanes(defaultPlanesEstandar);
-        if (resMiSel.ok) { const data = await resMiSel.json(); if (data && data.length > 0) setCatalogoMiSeleccion(data); else setCatalogoMiSeleccion(CATALOGO_MISEL_FALLBACK); } else setCatalogoMiSeleccion(CATALOGO_MISEL_FALLBACK);
-      } catch (error) {
-        setCatalogoEquipos(defaultTelefonosEstandar); setCatalogoTitanio(CATALOGO_TITANIO_FALLBACK); setCatalogoPlanes(defaultPlanesEstandar); setCatalogoMiSeleccion(CATALOGO_MISEL_FALLBACK);
-      } finally { setIsCatalogLoading(false); }
-    };
-    fetchCatalogos();
-  }, []);
-
-  const PLANES_ACTIVOS = useMemo(() => {
-    const base = esEmpresarial ? [...PLANES_EMPRESARIAL] : [...catalogoPlanes];
-    if (!base.find(p => p.parrilla === "TITANIO" || p.nombre === "Titanio (42GB)")) base.push(PLAN_TITANIO_FALLBACK);
-    if (!base.find(p => p.parrilla === "MI_SELECCION" || p.nombre === "Mi Selección (Black 42GB)")) base.push(PLAN_MISEL_FALLBACK);
-    return base;
-  }, [esEmpresarial, catalogoPlanes]);
-
-  const CATALOGO_ACTIVO = useMemo(() => esEmpresarial ? CATALOGO_TELEFONOS_EMPRESARIAL : catalogoEquipos, [esEmpresarial, catalogoEquipos]);
-  const TIPOS_VENTA_ACTIVOS = esEmpresarial ? TIPOS_VENTA_EMPRESARIAL : TIPOS_VENTA_ESTANDAR;
-  const TIPOS_VENTA_ACTIVOS_FILTRADOS = useMemo(() => {
-    if (!TIPOS_VENTA_ACTIVOS) return {};
-    const filtrado = {};
-    Object.keys(TIPOS_VENTA_ACTIVOS).forEach(key => { if (key.trim().toUpperCase().includes('NUEVA') || key.trim().toUpperCase().includes('RENOVACI')) filtrado[key] = TIPOS_VENTA_ACTIVOS[key]; });
-    return filtrado;
-  }, [TIPOS_VENTA_ACTIVOS]);
-  
-  const MARCAS_UNICAS_ACTIVAS = useMemo(() => [...new Set(CATALOGO_ACTIVO.map(t => String(t.marca || "").trim().toUpperCase()))].filter(Boolean).sort(), [CATALOGO_ACTIVO]);
-
-  useEffect(() => { setFolioId(modoCotizador ? `C-${Math.floor(Date.now() / 1000)}` : `V-${Math.floor(Date.now() / 1000)}`); }, [modoCotizador]);
-
-  const draftKey = `evren_draft_${modoCotizador ? 'cot' : 'cap'}_${session?.id}`;
-  const defaultValues = useMemo(() => getCatalog(draftKey, { 
-    marcaSeleccionada: "", equipoId: "", planId: "", soloPlan: false, soloSeguro: false, aplicaCondicion: false, tipoCondicion: "", montoCondicion: "", titanioCero: false, miSeleccionCero: false, tipoCaptura: "Presencial", atendioTMK: "", numeroOrden: "",
-    email: "", ref1Nombre: "", ref1Telefono: "", ref2Nombre: "", ref2Telefono: "", identificacionBase64: "", identificacionNombre: "", requiereComprobante: false, comprobanteBase64: "", comprobanteNombre: "", bloqueadoPorMesa: false, condicionesMesa: [], cotizacionOriginalId: "",
-    paqueteFirmadoVendedor: null, nipPortabilidad: "", paqueteMesaDescarga: null, seriesAsignadasMesa: false, estatusActual: "", alertaRiesgo: null, fichaPagoBase64: "", fichaPagoNombre: "", linkBiometricos: ""
-  }), [draftKey]);
-
-  const { register, handleSubmit, watch, setValue, reset, setFocus } = useForm({ defaultValues });
-  const formValues = watch(); 
-
-  const isSinEquipo = formValues.soloPlan;
-  const esPortabilidad = formValues.subtipoVenta?.includes("Portabilidad");
-  const aplicaPromoPorta = formValues.categoriaVenta === "Línea Nueva" && formValues.subtipoVenta === "Portabilidad";
-  
-  const rawTel = String(formValues.telefono || "").replace(/\D/g, '');
-  const rawImei = String(formValues.imei || "").replace(/\D/g, '');
-  const iccLength = String(formValues.icc || "").length; 
-  const rawTelRef1 = String(formValues.ref1Telefono || "").replace(/\D/g, '');
-  const rawTelRef2 = String(formValues.ref2Telefono || "").replace(/\D/g, '');
-
-  const equipoSeleccionado = (formValues.titanioCero ? catalogoTitanio : (formValues.miSeleccionCero ? catalogoMiSeleccion : CATALOGO_ACTIVO)).find(e => String(e.id) === String(formValues.equipoId));
-  
-  let valorContadoBase = Number(equipoSeleccionado?.precioContado) || 0;
-  if (equipoSeleccionado && valorContadoBase === 0) {
-      const eqNormal = CATALOGO_ACTIVO.find(e => String(e.modelo).trim().toLowerCase() === String(equipoSeleccionado.modelo).trim().toLowerCase());
-      if (eqNormal) valorContadoBase = Number(eqNormal.precioContado) || 0;
+// ==========================================
+// ☁️ CONFIGURACIÓN DE AWS S3
+// ==========================================
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
   }
+});
+const BUCKET_NAME = process.env.AWS_BUCKET_NAME;
 
-  const planSeleccionadoDetectado = formValues.soloSeguro ? SEGUROS_ATT.find(p => String(p.id) === String(formValues.planId)) : PLANES_ACTIVOS.find(p => String(p.id) === String(formValues.planId));
+const upload = multer({ dest: 'uploads/' }); 
+const express = require('express');
+const app = express();
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// ==========================================
+// 🛡️ GUARDIA DE SEGURIDAD MANUAL (CORS)
+// ==========================================
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   
-  const planesFiltrados = useMemo(() => {
-    if (formValues.soloSeguro) {
-      if (equipoSeleccionado) {
-         let p = valorContadoBase;
-         if (p >= 500 && p <= 4000) return [SEGUROS_ATT[0]];
-         if (p >= 4001 && p <= 6000) return [SEGUROS_ATT[1]];
-         if (p >= 6001 && p <= 13000) return [SEGUROS_ATT[2]];
-         if (p >= 13001 && p <= 38000) return [SEGUROS_ATT[3]];
-         if (p >= 38001 && p <= 60000) return [SEGUROS_ATT[4]];
-         return []; 
-      }
-      return SEGUROS_ATT;
-    }
-    if (formValues.soloPlan) return PLANES_ACTIVOS.filter(p => p.parrilla?.toLowerCase() === 'lite' || p.parrilla?.toLowerCase() === 'premium' || p.nombre?.toLowerCase().includes('azul 0'));
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
+// ==========================================
+// 📦 MODELOS DE MONGODB
+// ==========================================
+const catalogoSchema = new mongoose.Schema({ tipo: String, data: mongoose.Schema.Types.Mixed });
+const Catalogo = mongoose.model('Catalogo', catalogoSchema);
+
+const ventaSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
+const Venta = mongoose.model('Venta', ventaSchema);
+
+const cotizacionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }
+}, { strict: false, timestamps: true });
+const Cotizacion = mongoose.model('Cotizacion', cotizacionSchema);
+
+const traspasoSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
+const Traspaso = mongoose.model('Traspaso', traspasoSchema);
+
+const perfilSchema = new mongoose.Schema({
+  usuario: { type: String, required: true, unique: true },
+  avatar: { type: String } 
+});
+const Perfil = mongoose.models.Perfil || mongoose.model('Perfil', perfilSchema);
+
+const equipoSchema = new mongoose.Schema({
+  imei: { type: String, required: true, unique: true },
+  modelo: { type: String, required: true },
+  marca: { type: String },
+  sku: { type: String },
+  iccid: { type: String }, 
+  proveedor: { type: String },
+  referencia: { type: String },
+  folioCompra: { type: String },
+  sucursal: { type: String, default: 'GENERAL' },
+  estado: { type: String, default: 'Disponible' },
+  fechaIngreso: { type: String },
+  fechaRegistro: { type: Date, default: Date.now }
+});
+const Equipo = mongoose.models.Equipo || mongoose.model('Equipo', equipoSchema);
+
+const simSchema = new mongoose.Schema({
+  icc: { type: String, required: true, unique: true },
+  tipo: { type: String, default: 'SIM' },
+  modelo: { type: String },
+  sku: { type: String },
+  proveedor: { type: String },
+  referencia: { type: String },
+  folioCompra: { type: String },
+  sucursal: { type: String, default: 'GENERAL' },
+  estado: { type: String, default: 'Disponible' },
+  fechaIngreso: { type: String },
+  fechaRegistro: { type: Date, default: Date.now }
+});
+const Sim = mongoose.models.Sim || mongoose.model('Sim', simSchema);
+
+const usuarioSchema = new mongoose.Schema({
+  nombre: { type: String, required: true, uppercase: true },
+  usuario: { type: String, required: true, unique: true, uppercase: true },
+  contrasenaEncriptada: { type: String, required: true },
+  categoria: { type: String, required: true, uppercase: true },
+  organizacion: { type: String, required: true, uppercase: true },
+  sucursal: { type: String, required: true, uppercase: true },
+  nivelAcceso: { type: String, required: true, uppercase: true, enum: ['ADMINISTRADOR', 'USUARIO'] },
+  dosPasosActivo: { type: Boolean, default: false },
+  dosPasosSecreto: { type: String, default: null },
+  activo: { type: Boolean, default: true }, 
+  fechaCreacion: { type: Date, default: Date.now }
+});
+const Usuario = mongoose.models.Usuario || mongoose.model('Usuario', usuarioSchema);
+
+const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
+
+// ==========================================================================
+// 🛠️ FUNCIÓN HELPER: SUBIR BASE64 A S3
+// ==========================================================================
+const uploadBase64ToS3 = async (base64String, folder, fileName) => {
+  if (!base64String || !base64String.includes('base64,')) return base64String; 
+
+  try {
+    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return base64String;
+
+    const type = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
     
-    let planesBase = PLANES_ACTIVOS.filter(p => p.parrilla?.toLowerCase() === 'premium' || p.parrilla?.toLowerCase().includes('titanio') || p.parrilla === 'MI_SELECCION');
-    if (equipoSeleccionado && equipoSeleccionado.diferencia) planesBase = planesBase.filter(p => equipoSeleccionado.diferencia[p.nombre] !== undefined);
-    
-    if (!formValues.titanioCero) planesBase = planesBase.filter(p => !(p.nombre?.toLowerCase().includes('titanio') || p.parrilla?.toLowerCase().includes('titanio') || p.matrizKey?.toLowerCase() === "titanio"));
-    if (!formValues.miSeleccionCero) planesBase = planesBase.filter(p => p.parrilla !== "MI_SELECCION" && p.nombre !== "Mi Selección (Black 42GB)");
-    
-    return planesBase;
-  }, [PLANES_ACTIVOS, formValues.soloPlan, formValues.soloSeguro, formValues.titanioCero, formValues.miSeleccionCero, equipoSeleccionado, valorContadoBase]);
+    // Generar un nombre único para evitar colisiones
+    const uniqueName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}_${fileName.replace(/[^a-zA-Z0-9.]/g, '_')}`;
 
-  const planSeleccionado = useMemo(() => { if (!planSeleccionadoDetectado) return null; return { ...planSeleccionadoDetectado, nombre: planSeleccionadoDetectado.nombre || "PLAN BASE", parrilla: planSeleccionadoDetectado.parrilla || "PREMIUM" }; }, [planSeleccionadoDetectado]);
+    const command = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: uniqueName,
+      Body: buffer,
+      ContentType: type,
+    });
 
-  const isPlanTitanio = planSeleccionado?.nombre?.toLowerCase().includes('titanio') || planSeleccionado?.parrilla?.toLowerCase().includes('titanio') || planSeleccionado?.matrizKey?.toLowerCase() === "titanio";
-  const seguroInvalidoPorMonto = equipoSeleccionado && (valorContadoBase < 500 || valorContadoBase > 60000);
-  const esComprobanteObligatorio = isPlanTitanio || formValues.titanioCero || formValues.marcaSeleccionada === "APPLE";
-
-  const equiposFiltrados = useMemo(() => {
-    if (!formValues.marcaSeleccionada && !formValues.titanioCero && !formValues.miSeleccionCero) return [];
-    let lista = formValues.titanioCero ? catalogoTitanio : (formValues.miSeleccionCero ? catalogoMiSeleccion : CATALOGO_ACTIVO);
-    if (isPlanTitanio || formValues.titanioCero) lista = lista.filter(e => String(e.marca || "").trim().toUpperCase() === 'APPLE');
-    else if (formValues.marcaSeleccionada) lista = lista.filter(e => String(e.marca || "").trim().toUpperCase() === String(formValues.marcaSeleccionada).trim().toUpperCase());
-    if (planSeleccionado && formValues.plazo && !formValues.titanioCero) lista = lista.filter(eq => eq.diferencia && eq.diferencia[planSeleccionado.nombre] && eq.diferencia[planSeleccionado.nombre][formValues.plazo] !== undefined);
-    const equiposUnicos = []; const idsVistos = new Set();
-    for (const equipo of lista) { if (!idsVistos.has(equipo.id)) { idsVistos.add(equipo.id); equiposUnicos.push(equipo); } }
-    return equiposUnicos;
-  }, [CATALOGO_ACTIVO, catalogoTitanio, catalogoMiSeleccion, formValues.titanioCero, formValues.miSeleccionCero, formValues.marcaSeleccionada, isPlanTitanio, planSeleccionado, formValues.plazo]);
-  
-  let opcionesPlazo = planSeleccionado ? getPlazosDisponibles(planSeleccionado.parrilla) : [];
-  if (!opcionesPlazo || opcionesPlazo.length === 0) opcionesPlazo = [24, 30, 36]; 
-  if (isPlanTitanio || formValues.titanioCero) opcionesPlazo = [24]; 
-  if (formValues.miSeleccionCero) opcionesPlazo = [24, 30, 36];
-  
-  const safePlanParaPricing = planSeleccionado;
-  const safeEquipoParaPricing = useMemo(() => {
-    if (!equipoSeleccionado) return null;
-    const planName = safePlanParaPricing?.nombre || "DUMMY"; const parrilla = safePlanParaPricing?.parrilla || "PREMIUM";
-    const diffReal = (equipoSeleccionado.diferencia && equipoSeleccionado.diferencia[planName]) ? equipoSeleccionado.diferencia[planName] : { "24": 0, "30": 0, "36": 0 };
-    return { ...equipoSeleccionado, diferencia: { ...(equipoSeleccionado.diferencia || {}), [planName]: diffReal, [parrilla]: diffReal, "PREMIUM": diffReal, "TITANIO": diffReal, "MI_SELECCION": diffReal } };
-  }, [equipoSeleccionado, safePlanParaPricing]);
-
-  const fullPricing = usePricing({ formValues, planSeleccionado: safePlanParaPricing, equipoSeleccionado: safeEquipoParaPricing, aplicaPromoPorta }) || {};
-  const maxEnganche = fullPricing.costoEquipoOriginal || 0; 
-
-  const uniqueConds = useMemo(() => {
-    const condsCompletas = CONDICIONES_CREDITO.includes("Aportación voluntaria") ? CONDICIONES_CREDITO : [...CONDICIONES_CREDITO, "Aportación voluntaria"];
-    return isSinEquipo ? condsCompletas.filter(c => c.toLowerCase().includes("garant") && !c.toLowerCase().includes("equipo")) : condsCompletas;
-  }, [isSinEquipo]);
-  
-  const placeholderMonto = fullPricing.engancheAplicado > 0 ? `Monto (Máx: $${maxEnganche.toLocaleString()})` : "Monto ($)";
-  const errorMonto = formValues.aplicaCondicion && (Number(formValues.montoCondicion) > maxEnganche);
-
-  useEffect(() => { 
-    const timeoutId = setTimeout(() => { 
-      try {
-        const draftSeguro = { ...formValues }; delete draftSeguro.identificacionBase64; delete draftSeguro.comprobanteBase64; delete draftSeguro.fichaPagoBase64; delete draftSeguro.paqueteMesaDescarga; delete draftSeguro.paqueteFirmadoVendedor;
-        localStorage.setItem(draftKey, JSON.stringify(draftSeguro)); 
-      } catch (e) {}
-    }, 1000); 
-    return () => clearTimeout(timeoutId); 
-  }, [formValues, draftKey]);
-  
-  const prevTitanioCero = useRef(formValues.titanioCero);
-  const prevMiSeleccionCero = useRef(formValues.miSeleccionCero);
-  useEffect(() => {
-    if (formValues.titanioCero && !prevTitanioCero.current) {
-      setValue("soloPlan", false); setValue("soloSeguro", false); setValue("miSeleccionCero", false); setValue("marcaSeleccionada", "APPLE", { shouldValidate: true });
-      const pTit = PLANES_ACTIVOS.find(p => p.nombre?.toLowerCase().includes('titanio') || p.parrilla?.toLowerCase().includes('titanio') || p.matrizKey?.toLowerCase() === "titanio");
-      if (pTit) setValue("planId", String(pTit.id)); setValue("plazo", "24"); setValue("equipoId", ""); 
-    }
-    prevTitanioCero.current = formValues.titanioCero;
-  }, [formValues.titanioCero, formValues.marcaSeleccionada, isPlanTitanio, PLANES_ACTIVOS, setValue]);
-
-  useEffect(() => {
-    if (formValues.miSeleccionCero && !prevMiSeleccionCero.current) {
-      setValue("soloPlan", false); setValue("soloSeguro", false); setValue("titanioCero", false); setValue("marcaSeleccionada", "", { shouldValidate: true });
-      const pMisel = PLANES_ACTIVOS.find(p => p.parrilla === "MI_SELECCION" || p.nombre === "Mi Selección (Black 42GB)");
-      if (pMisel) setValue("planId", String(pMisel.id)); setValue("plazo", "24"); setValue("equipoId", ""); 
-    }
-    prevMiSeleccionCero.current = formValues.miSeleccionCero;
-  }, [formValues.miSeleccionCero, PLANES_ACTIVOS, setValue]);
-
-  const handleReset = () => { 
-    localStorage.removeItem(draftKey); 
-    reset({ categoriaVenta: "", subtipoVenta: "", nombreCliente: "", telefono: "", marcaSeleccionada: "", equipoId: "", planId: "", plazo: "", aplicaControl: false, aplicaSeguro: false, icc: "", imei: "", aplicaCondicion: false, tipoCondicion: "", montoCondicion: "", formaPago: "", folioPago: "", numeroOrden: "", comentarios: "", soloPlan: false, soloSeguro: false, titanioCero: false, miSeleccionCero: false, tipoCaptura: "Presencial", atendioTMK: "", email: "", ref1Nombre: "", ref1Telefono: "", ref2Nombre: "", ref2Telefono: "", identificacionBase64: "", identificacionNombre: "", requiereComprobante: false, comprobanteBase64: "", comprobanteNombre: "", bloqueadoPorMesa: false, condicionesMesa: [], cotizacionOriginalId: "", paqueteFirmadoVendedor: null, nipPortabilidad: "", paqueteMesaDescarga: null, seriesAsignadasMesa: false, estatusActual: "", alertaRiesgo: null, fichaPagoBase64: "", fichaPagoNombre: "", linkBiometricos: "" });
-    setFolioId(modoCotizador ? `C-${Math.floor(Date.now() / 1000)}` : `V-${Math.floor(Date.now() / 1000)}`); 
-  };
-
-  const handleSeleccionarMarca = (marca) => { 
-      if (formValues.marcaSeleccionada === marca) { setValue("marcaSeleccionada", ""); setValue("equipoId", ""); if (formValues.soloSeguro) setValue("planId", ""); setValue("requiereComprobante", false); 
-      } else { setValue("equipoId", ""); setValue("marcaSeleccionada", marca); if (marca.toUpperCase() !== "APPLE" && isPlanTitanio && !formValues.miSeleccionCero) setValue("planId", ""); if (formValues.soloSeguro) setValue("planId", ""); }
-  };
-
-  const MAX_LOCAL_SIZE = 50 * 1024 * 1024; 
-  
-  // 🚀 ADVERTENCIA INTELIGENTE DE PESO
-  const processFile = (file, base64Key, nameKey) => {
-    if (!file) return;
-    if (file.size > MAX_LOCAL_SIZE) { if(showToast) showToast({text: "⚠️ Archivo demasiado pesado.", type: "error"}); return; }
-    
-    if (file.type === 'application/pdf') {
-        // Si el PDF pesa más de 1MB, avisamos que se va a tardar
-        if (file.size > 1024 * 1024) {
-            if(showToast) showToast({text: "⚠️ Estás subiendo un PDF muy pesado. El envío será lento. ¡Es mejor usar fotos (JPG/PNG) para que sea instantáneo!", type: "warning"});
-        }
-        const reader = new FileReader(); 
-        reader.onloadend = () => { setValue(base64Key, reader.result); setValue(nameKey, file.name); }; 
-        reader.readAsDataURL(file);
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 1200; const MAX_HEIGHT = 1200;
-            let width = img.width; let height = img.height;
-
-            if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
-            else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-
-            canvas.width = width; canvas.height = height;
-            const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
-            setValue(base64Key, compressedBase64); setValue(nameKey, file.name);
-        };
-        img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleIdentificacionUpload = (e) => processFile(e.target.files[0], "identificacionBase64", "identificacionNombre");
-  const handleComprobanteUpload = (e) => processFile(e.target.files[0], "comprobanteBase64", "comprobanteNombre");
-  const handleFichaPagoUpload = (e) => processFile(e.target.files[0], "fichaPagoBase64", "fichaPagoNombre");
-  const exportarCSV = () => { if(showToast) showToast({ text: "Exportando...", type: "success" }); };
-
-  const cargarCotizacion = (cotizacion, paraRevision = false) => {
-    const payload = { ...cotizacion.datos, cotizacionOriginalId: cotizacion.id || cotizacion._id || cotizacion.folio, paqueteMesaDescarga: cotizacion.paqueteMesa, estatusActual: cotizacion.estatus };
-    if (!payload.marcaSeleccionada && payload.equipoId) { const eq = CATALOGO_ACTIVO.find(e => String(e.id) === String(payload.equipoId)); if (eq) payload.marcaSeleccionada = eq.marca; }
-
-    if (payload.bloqueadoPorMesa && Array.isArray(payload.condicionesMesa) && payload.condicionesMesa.length > 0) {
-        const enganche = payload.condicionesMesa.find(c => c.tipo.toLowerCase().includes('enganche'));
-        const garantia = payload.condicionesMesa.find(c => c.tipo.toLowerCase().includes('garant'));
-        if (enganche) { payload.aplicaCondicion = true; payload.tipoCondicion = "Enganche por el equipo"; payload.montoCondicion = enganche.monto; } 
-        else if (garantia) { payload.aplicaCondicion = true; payload.tipoCondicion = garantia.tipo; payload.montoCondicion = garantia.monto; }
-    }
-
-    reset(payload); setFolioId(cotizacion.id || cotizacion._id || cotizacion.folio);
-    if(showToast) showToast({ text: paraRevision ? "Dictamen cargado." : "Trámite recuperado.", type: "success" });
-    if(setVistaActiva) setVistaActiva('formulario'); return true; 
-  };
-
-  const actualizarEnServidor = async (id, payload) => {
-    if (!id) return false;
-    try { const response = await fetch(`${API_URL}/cotizaciones/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.token}` }, body: JSON.stringify(payload) }); return response.ok; } catch (error) { return false; }
-  };
-
-  const crearEnServidor = async (payload, esVenta = false) => {
-    try { const endpoint = esVenta ? `${API_URL}/ventas` : `${API_URL}/cotizaciones`; const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.token}` }, body: JSON.stringify(payload) }); return response.ok; } catch (error) { return false; }
-  };
-
-  const cancelarCotizacion = async (identificador, motivo) => {
-    let targetId = (!identificador) ? null : (typeof identificador === 'string' ? identificador : identificador._id || identificador.id || identificador.folio);
-    if (!targetId) return false;
-    setIsSaving(true);
-    const exitoApi = await actualizarEnServidor(targetId, { estatus: 'Cancelada', datos: { motivoCancelacion: motivo || 'Cancelada por el usuario' } });
-    setIsSaving(false);
-    if(showToast) showToast({ text: "Trámite Cancelado.", type: "success" });
-    handleReset(); if(setVistaActiva) setVistaActiva('cotizaciones');
-    return exitoApi; 
-  };
-
-  const finalizarBiometricos = async (identificador) => {
-    let targetId = (!identificador) ? null : (typeof identificador === 'string' ? identificador : identificador._id || identificador.id || identificador.folio);
-    if (!targetId) return false;
-    setIsSaving(true);
-    const exitoApi = await actualizarEnServidor(targetId, { estatus: 'Validando Biométricos' });
-    setIsSaving(false);
-    if(showToast) showToast({ text: exitoApi ? "Biométricos enviados a Mesa para validación." : "Error de red.", type: exitoApi ? "success" : "error" });
-    return exitoApi;
-  };
-
-  const onSave = async (formData) => {
-    let data = { ...formData };
-    if (data && (data.nativeEvent || data._reactName || data.type === 'click')) { data = formValues; }
-
-    try {
-        setIsSaving(true);
-        const vendedorFijo = nombreVendedorSeguro; 
-        data.vendedor = vendedorFijo;
-        data.sucursal = sucursalRealUsuario;
-
-        const estatusSeguro = data.estatusActual || formValues.estatusActual;
-        const idCotizacion = data.cotizacionOriginalId || folioId;
-        
-        if (estatusSeguro === 'Dictaminada') {
-            const seguroRemovido = !data.aplicaSeguro; 
-            const addonRemovido = !data.aplicaControl; 
-            const modalidadCambiada = (data.soloPlan) || (data.soloSeguro);
-
-            if (seguroRemovido || addonRemovido || modalidadCambiada) {
-                data.condicionesMesa = [];
-                data.bloqueadoPorMesa = false;
-                data.estatusActual = 'Validando Biométricos'; 
-                data.tipoCondicion = ""; data.montoCondicion = ""; data.aplicaCondicion = false;
-                data.alertaRiesgo = `El ejecutivo modificó condiciones comerciales. Requiere nuevo dictamen.`;
-                
-                const ok = await actualizarEnServidor(idCotizacion, { estatus: 'Validando Biométricos', datos: data, detallesFinancieros: fullPricing, equipoNombre: equipoSeleccionado ? equipoSeleccionado.modelo : "Sin Equipo", planNombre: planSeleccionado ? planSeleccionado.nombre : "Sin Plan" });
-
-                if (ok) {
-                    if(showToast) showToast({ text: `Oferta modificada. Regresó a Mesa para nuevo dictamen.`, type: "error" });
-                    handleReset(); if(typeof setVistaActiva === 'function') setVistaActiva('cotizaciones');
-                } else { if(showToast) showToast({ text: "Error al contactar con el servidor.", type: "error" }); }
-            } else {
-                data.alertaRiesgo = 'EL EJECUTIVO ACEPTÓ EL DICTAMEN. PREPARAR MEDIOS DE PAGO Y CONTRATOS.';
-                data.bloqueadoPorMesa = true;
-                
-                const ok = await actualizarEnServidor(idCotizacion, { estatus: 'Aprobada por Ejecutivo', datos: data, detallesFinancieros: fullPricing, equipoNombre: equipoSeleccionado ? equipoSeleccionado.modelo : "Sin Equipo", planNombre: planSeleccionado ? planSeleccionado.nombre : "Sin Plan" });
-
-                if (ok) {
-                    if(showToast) showToast({ text: "Oferta Aceptada. Esperando contratos y formatos de pago de Mesa.", type: "success" });
-                    handleReset(); if(typeof setVistaActiva === 'function') setVistaActiva('cotizaciones');
-                } else { if(showToast) showToast({ text: "Error al comunicar con el servidor.", type: "error" }); }
-            }
-            return; 
-        }
-
-        if (!modoCotizador || data.bloqueadoPorMesa) {
-          if (data.tipoCaptura === 'No Presencial' || data.bloqueadoPorMesa) {
-            if (!data.email || !data.email.includes('@')) { if(showToast) showToast({ text: "Falta Correo.", type: "error" }); return; }
-            if (data.bloqueadoPorMesa) {
-                const p = data.paqueteFirmadoVendedor;
-                if (!p || !p.contrato || !p.buro || !p.responsabilidad || !p.resumen) { if(showToast) showToast({ text: "Faltan PDFs.", type: "error" }); return; }
-                if (fullPricing.pagoInicialFinal > 0 && !data.fichaPagoBase64) { if(showToast) showToast({ text: "Falta Ficha de Pago.", type: "error" }); return; }
-            }
-            
-            const ok = await actualizarEnServidor(idCotizacion, { estatus: data.bloqueadoPorMesa ? 'Firma Subida' : 'Esperando Expediente', datos: data, detallesFinancieros: fullPricing, fechaEnvioContrato: new Date().toISOString(), paqueteFirmadoVendedor: data.paqueteFirmadoVendedor, equipoNombre: equipoSeleccionado ? equipoSeleccionado.modelo : "Sin Equipo", planNombre: planSeleccionado ? planSeleccionado.nombre : "Sin Plan" });
-            
-            if (ok) { setShowConfetti(true); setShowSuccess(true); setTimeout(() => { setShowSuccess(false); setShowConfetti(false); handleReset(); if(typeof setVistaActiva === 'function') setVistaActiva('cotizaciones'); }, 2000); }
-            return;
-          }
-
-          const ok = await crearEnServidor({ ...data, folio: folioId, vendedor: vendedorFijo, sucursal: sucursalRealUsuario, fechaVenta: new Date().toISOString(), detallesFinancieros: fullPricing, equipoNombre: equipoSeleccionado ? equipoSeleccionado.modelo : "Sin Equipo", planNombre: planSeleccionado ? planSeleccionado.nombre : "Sin Plan" }, true);
-          if (ok) { setShowSuccess(true); setShowConfetti(true); setTimeout(() => { setShowSuccess(false); setShowConfetti(false); handleReset(); if(typeof setVistaActiva === 'function') setVistaActiva('historial_ventas'); }, 2000); }
-          return;
-        }
-
-        const isRemoto = data.tipoCaptura === 'No Presencial';
-        if (isRemoto) {
-          if (esPortabilidad && data.nipPortabilidad?.length !== 4) return;
-          if (!data.email || !data.email.includes('@')) return;
-          if (!data.ref1Nombre || String(data.ref1Telefono || "").replace(/\D/g, '').length !== 10) return;
-          if (!data.ref2Nombre || String(data.ref2Telefono || "").replace(/\D/g, '').length !== 10) return;
-          if (estatusSeguro !== 'Dictaminada' && !data.identificacionBase64) return;
-        }
-
-        const ok = await crearEnServidor({ id: folioId, folio: folioId, fecha: new Date().toISOString(), expira: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), datos: data, detallesFinancieros: fullPricing, equipoNombre: equipoSeleccionado ? equipoSeleccionado.modelo : "Sin Equipo", planNombre: planSeleccionado ? planSeleccionado.nombre : "Sin Plan", cliente: data.nombreCliente || "Cliente Anónimo", estatus: isRemoto ? 'Pendiente' : 'Guardada', sucursal: sucursalRealUsuario, vendedor: vendedorFijo }, false);
-        if (ok) { setShowConfetti(true); setShowSuccess(true); setTimeout(() => { setShowSuccess(false); setShowConfetti(false); handleReset(); if(typeof setVistaActiva === 'function') setVistaActiva('cotizaciones'); }, 2500); }
-
-    } catch (error) {
-        console.error("Error:", error);
-        if(showToast) showToast({ text: "Ocurrió un error inesperado al contactar con la nube.", type: "error" });
-    } finally {
-        setIsSaving(false); 
-    }
-  };
-
-  return {
-    register, handleSubmit, watch, setValue, setFocus, formValues,
-    isSaving, showSuccess, showConfetti, folioId, ejecutivosTMK,
-    isAdmin, esEmpresarial, esTienda, esTelemarketing, sucursalRealUsuario, MAX_LOCAL_SIZE,
-    MARCAS_UNICAS_ACTIVAS, TIPOS_VENTA_ACTIVOS_FILTRADOS,
-    equiposFiltrados, planesFiltrados, opcionesPlazo, isCatalogLoading,
-    planSeleccionado, equipoSeleccionado, isSinEquipo, esPortabilidad, rawTel, rawImei, iccLength, rawTelRef1, rawTelRef2,
-    fullPricing, maxEnganche, uniqueConds, placeholderMonto, errorMonto, isPlanTitanio, seguroInvalidoPorMonto,
-    handleReset, handleSeleccionarMarca, handleIdentificacionUpload, handleComprobanteUpload, handleFichaPagoUpload, onSave, cargarCotizacion, exportarCSV, cancelarCotizacion,
-    finalizarBiometricos, esComprobanteObligatorio 
-  };
+    await s3Client.send(command);
+    return `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${uniqueName}`;
+  } catch (error) {
+    console.error("Error subiendo a S3:", error);
+    return base64String; // Fallback: si falla S3, guarda el Base64 original en MongoDB
+  }
 };
+
+// ==========================================================================
+// 🚀 RUTAS DE 2FA Y LOGIN 
+// ==========================================================================
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { usuario, contrasena, sucursal, codigo2FA } = req.body;
+    const cleanUser = String(usuario).trim().toUpperCase();
+    
+    const user = await Usuario.findOne({ usuario: cleanUser, activo: true });
+    
+    if (!user) return res.status(401).json({ mensaje: "Usuario no encontrado o inactivo." });
+    
+    const contrasenaValida = bcrypt.compareSync(String(contrasena).trim(), user.contrasenaEncriptada);
+    if (!contrasenaValida) return res.status(401).json({ mensaje: "Contraseña incorrecta." });
+    
+    if (user.nivelAcceso !== "ADMINISTRADOR" && user.sucursal !== sucursal) {
+      const esMesaControl = user.sucursal && user.sucursal.includes("MESA DE CONTROL");
+      if (!esMesaControl) {
+        return res.status(403).json({ mensaje: `Acceso denegado al módulo ${sucursal}` });
+      }
+    }
+    
+    if (user.dosPasosActivo) {
+      if (!codigo2FA) return res.status(206).json({ requiere2FA: true, mensaje: "Ingresa tu código de Authenticator." });
+      const tokenValido = speakeasy.totp.verify({ secret: user.dosPasosSecreto, encoding: 'base32', token: codigo2FA, window: 1 });
+      if (!tokenValido) return res.status(401).json({ mensaje: "Código Authenticator incorrecto o expirado." });
+    }
+    
+    const token = jwt.sign({ id: user.usuario, nivel: user.nivelAcceso }, SECRET_KEY, { expiresIn: '8h' });
+    
+    res.json({ 
+      token: token, 
+      user: { 
+        nombre: user.nombre, 
+        nivelAcceso: user.nivelAcceso, 
+        organizacion: user.organizacion, 
+        sucursal: user.sucursal, 
+        dosPasosActivo: user.dosPasosActivo 
+      } 
+    });
+  } catch (error) {
+    console.error("Error en login:", error);
+    res.status(500).json({ mensaje: "Error interno del servidor." });
+  }
+});
+
+app.post('/api/auth/2fa/disable', async (req, res) => {
+  try {
+    const { usuario, contrasena } = req.body;
+    const user = await Usuario.findOne({ usuario: String(usuario).toUpperCase() });
+    if (!user) return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    const valida = bcrypt.compareSync(contrasena, user.contrasenaEncriptada);
+    if (!valida) return res.status(401).json({ mensaje: "Contraseña incorrecta." });
+
+    user.dosPasosActivo = false;
+    user.dosPasosSecreto = null;
+    await user.save();
+    res.json({ mensaje: "Seguridad 2FA desactivada." });
+  } catch (error) { 
+    res.status(500).json({ mensaje: "Error del servidor." }); 
+  }
+});
+
+// ==========================================================================
+// 👥 RUTAS DE ADMINISTRACIÓN DE USUARIOS (CRUD)
+// ==========================================================================
+app.get('/api/usuarios', async (req, res) => {
+  try {
+    const usuarios = await Usuario.find({ activo: true }).select('-contrasenaEncriptada -dosPasosSecreto').sort({ fechaCreacion: -1 });
+    res.json(usuarios);
+  } catch (error) { res.status(500).json({ mensaje: "Error al obtener usuarios." }); }
+});
+
+app.post('/api/usuarios', async (req, res) => {
+  try {
+    const { nombre, usuario, contrasena, categoria, organizacion, sucursal, nivelAcceso } = req.body;
+    const existe = await Usuario.findOne({ usuario: String(usuario).toUpperCase() });
+    if (existe) return res.status(400).json({ mensaje: "El ID de usuario ya está en uso." });
+
+    const contrasenaEncriptada = bcrypt.hashSync(String(contrasena).trim(), 10);
+    const nuevoUsuario = new Usuario({ nombre, usuario, contrasenaEncriptada, categoria, organizacion, sucursal, nivelAcceso });
+    await nuevoUsuario.save();
+    
+    const usuarioSafe = nuevoUsuario.toObject();
+    delete usuarioSafe.contrasenaEncriptada;
+    delete usuarioSafe.dosPasosSecreto;
+    res.status(201).json(usuarioSafe);
+  } catch (error) { res.status(500).json({ mensaje: "Error al crear el usuario." }); }
+});
+
+app.put('/api/usuarios/:id', async (req, res) => {
+  try {
+    const { nombre, contrasena, categoria, organizacion, sucursal, nivelAcceso } = req.body;
+    const usuarioId = String(req.params.id).toUpperCase();
+    const updateData = { nombre, categoria, organizacion, sucursal, nivelAcceso };
+
+    if (contrasena && contrasena.trim() !== "") updateData.contrasenaEncriptada = bcrypt.hashSync(String(contrasena).trim(), 10);
+
+    const usuarioActualizado = await Usuario.findOneAndUpdate( { usuario: usuarioId }, { $set: updateData }, { new: true } ).select('-contrasenaEncriptada -dosPasosSecreto');
+    if (!usuarioActualizado) return res.status(404).json({ mensaje: "Usuario no encontrado." });
+    res.json(usuarioActualizado);
+  } catch (error) { res.status(500).json({ mensaje: "Error al actualizar el usuario." }); }
+});
+
+app.delete('/api/usuarios/:id', async (req, res) => {
+  try {
+    const usuarioId = String(req.params.id).toUpperCase();
+    const usuarioEliminado = await Usuario.findOneAndUpdate( { usuario: usuarioId }, { $set: { activo: false } }, { new: true } );
+    if (!usuarioEliminado) return res.status(404).json({ mensaje: "Usuario no encontrado." });
+    res.json({ mensaje: "Usuario eliminado correctamente." });
+  } catch (error) { res.status(500).json({ mensaje: "Error al eliminar el usuario." }); }
+});
+
+// ==========================================
+// 📸 RUTAS DE PERFIL, AVATARES Y PASSWORD
+// ==========================================
+app.post('/api/perfil/password', async (req, res) => {
+  try {
+    const { usuario, passActual, passNueva } = req.body;
+    const user = await Usuario.findOne({ usuario: String(usuario).toUpperCase() });
+    if (!user) return res.status(404).json({ mensaje: "Usuario no encontrado" });
+
+    const valida = bcrypt.compareSync(passActual, user.contrasenaEncriptada);
+    if (!valida) return res.status(401).json({ mensaje: "La contraseña actual es incorrecta." });
+
+    user.contrasenaEncriptada = bcrypt.hashSync(passNueva, 10);
+    await user.save();
+    res.json({ mensaje: "Contraseña actualizada exitosamente." });
+  } catch (error) { res.status(500).json({ mensaje: "Error del servidor." }); }
+});
+
+app.post('/api/perfil/avatar', async (req, res) => {
+  try {
+    const { usuario, avatar } = req.body;
+    if (!usuario) return res.status(400).json({ mensaje: "Falta el usuario" });
+    
+    // Subir avatar a AWS S3 si viene en base64
+    let avatarUrl = avatar;
+    if (avatar && avatar.includes('base64,')) {
+        avatarUrl = await uploadBase64ToS3(avatar, 'avatares', `${usuario}_avatar.jpg`);
+    }
+
+    await Perfil.findOneAndUpdate({ usuario: String(usuario).toUpperCase() }, { usuario: String(usuario).toUpperCase(), avatar: avatarUrl || "" }, { upsert: true, new: true });
+    res.status(200).json({ mensaje: "Avatar actualizado exitosamente" });
+  } catch (error) { res.status(500).json({ mensaje: "Error interno del servidor" }); }
+});
+
+app.get('/api/perfil/avatar/:usuario', async (req, res) => {
+  try {
+    const perfil = await Perfil.findOne({ usuario: String(req.params.usuario).toUpperCase() });
+    if (!perfil || !perfil.avatar) return res.status(404).json({ mensaje: "No hay foto" });
+    res.status(200).json({ avatar: perfil.avatar });
+  } catch (error) { res.status(500).json({ mensaje: "Error interno" }); }
+});
+
+// ==========================================
+// 🚀 RUTAS DE CATÁLOGOS Y VENTAS
+// ==========================================
+app.post('/api/catalogos', async (req, res) => {
+  const { tipo, data } = req.body;
+  if (!tipo || !data) return res.status(400).json({ mensaje: "Faltan datos o el tipo de catálogo." });
+  try { await Catalogo.findOneAndUpdate({ tipo: tipo }, { tipo: tipo, data: data }, { upsert: true, new: true }); res.status(200).json({ exito: true, mensaje: `Catálogo ${tipo} sincronizado en la Nube.` }); } catch (error) { res.status(500).json({ mensaje: "Error interno." }); }
+});
+
+app.get('/api/catalogos/:tipo', async (req, res) => {
+  try { const catalogo = await Catalogo.findOne({ tipo: req.params.tipo }); if (catalogo) res.status(200).json(catalogo.data); else res.status(404).json({ mensaje: "Catálogo no encontrado." }); } catch (error) { res.status(500).json({ error: "Error al buscar catálogo" }); }
+});
+
+app.get('/api/ventas', async (req, res) => { try { const ventas = await Venta.find().sort({ _id: -1 }); res.json(ventas); } catch (error) { res.status(500).json({ error: "Error al obtener ventas" }); } });
+
+app.post('/api/ventas', async (req, res) => { try { const nuevaVenta = new Venta(req.body); await nuevaVenta.save(); res.status(201).json({ message: "Venta guardada", data: nuevaVenta }); } catch (error) { res.status(500).json({ error: "Error al guardar venta" }); } });
+
+// ==========================================
+// 🚀 RUTAS DE COTIZACIONES (MESA DE CONTROL)
+// ==========================================
+
+// Optimizada: Devuelve todo porque los Base64 ya no existen, ¡ahora son URLs de AWS!
+app.get('/api/cotizaciones', async (req, res) => { 
+  try { 
+      const cotizacionesLigeras = await Cotizacion.find().sort({ _id: -1 }); 
+      res.json(cotizacionesLigeras); 
+  } 
+  catch (error) { res.status(500).json({ error: "Error al obtener cotizaciones" }); } 
+});
+
+app.get('/api/cotizaciones/detalle/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        let condicionesBusqueda = [ { id: id }, { folio: id }, { 'datos.id': id }, { 'datos.folio': id } ];
+        if (/^[0-9a-fA-F]{24}$/.test(id)) { condicionesBusqueda.push({ _id: new mongoose.Types.ObjectId(id) }); }
+        
+        const cotizacionCompleta = await Cotizacion.findOne({ $or: condicionesBusqueda });
+        if (!cotizacionCompleta) return res.status(404).json({ mensaje: "Trámite no encontrado." });
+        
+        res.status(200).json(cotizacionCompleta);
+    } catch (error) {
+        res.status(500).json({ error: "Error al obtener detalles de la cotización." });
+    }
+});
+
+// 🚀 CREAR COTIZACIÓN (VENDEDOR SUBE DOCUMENTOS AL CAPTURAR)
+app.post('/api/cotizaciones', async (req, res) => { 
+  try { 
+    let bodyData = { ...req.body };
+    const folio = bodyData.id || bodyData.folio;
+
+    if (bodyData.datos) {
+        const uploadPromises = [];
+        
+        // Subimos el Frente del INE
+        if (bodyData.datos.ineFrontBase64 && bodyData.datos.ineFrontBase64.includes('base64,')) {
+            uploadPromises.push(uploadBase64ToS3(bodyData.datos.ineFrontBase64, folio, bodyData.datos.ineFrontNombre || 'INE_Frente.jpg').then(url => { bodyData.datos.ineFrontBase64 = url; }));
+        }
+        
+        // Subimos el Reverso del INE
+        if (bodyData.datos.ineBackBase64 && bodyData.datos.ineBackBase64.includes('base64,')) {
+            uploadPromises.push(uploadBase64ToS3(bodyData.datos.ineBackBase64, folio, bodyData.datos.ineBackNombre || 'INE_Reverso.jpg').then(url => { bodyData.datos.ineBackBase64 = url; }));
+        }
+
+        // Subimos Comprobante
+        if (bodyData.datos.comprobanteBase64 && bodyData.datos.comprobanteBase64.includes('base64,')) {
+            uploadPromises.push(uploadBase64ToS3(bodyData.datos.comprobanteBase64, folio, bodyData.datos.comprobanteNombre || 'Comprobante.jpg').then(url => { bodyData.datos.comprobanteBase64 = url; }));
+        }
+        
+        // Porcel si aca caso se mandó un INE viejo unificado
+        if (bodyData.datos.identificacionBase64 && bodyData.datos.identificacionBase64.includes('base64,')) {
+            uploadPromises.push(uploadBase64ToS3(bodyData.datos.identificacionBase64, folio, bodyData.datos.identificacionNombre || 'INE.jpg').then(url => { bodyData.datos.identificacionBase64 = url; }));
+        }
+
+        if (uploadPromises.length > 0) await Promise.all(uploadPromises);
+    }
+
+    const nuevaCotizacion = new Cotizacion({ ...bodyData, id: folio }); 
+    await nuevaCotizacion.save(); 
+    res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion }); 
+  } 
+  catch (error) { 
+      console.error(error);
+      res.status(500).json({ error: "Error al guardar cotización" }); 
+  } 
+});
+
+// 🚀 ACTUALIZAR COTIZACIÓN (MESA SUBE CONTRATOS O VENDEDOR SUBE FIRMAS)
+app.put('/api/cotizaciones/:id', async (req, res) => {
+  try {
+      const { id } = req.params;
+      let bodyData = { ...req.body };
+      const uploadPromises = []; 
+
+      // 1. Si la Mesa manda el Paquete de Contratos (Paso 8)
+      if (bodyData.paqueteMesa) {
+          const p = bodyData.paqueteMesa;
+          const docsMesa = ['contrato', 'buro', 'responsabilidad', 'resumen', 'qrPago', 'pagoFormal'];
+          for (let doc of docsMesa) {
+              if (p[doc] && p[doc].base64 && p[doc].base64.includes('base64,')) {
+                  uploadPromises.push(uploadBase64ToS3(p[doc].base64, `${id}/mesa`, p[doc].name || `${doc}.pdf`).then(url => p[doc].base64 = url));
+              }
+          }
+      }
+
+      // 2. Si el Vendedor sube el Expediente Firmado o la Ficha de Pago (Paso 10)
+      if (bodyData.datos) {
+          if (bodyData.datos.fichaPagoBase64 && bodyData.datos.fichaPagoBase64.includes('base64,')) {
+              uploadPromises.push(uploadBase64ToS3(bodyData.datos.fichaPagoBase64, `${id}/firmados`, bodyData.datos.fichaPagoNombre || 'FichaPago.pdf').then(url => bodyData.datos.fichaPagoBase64 = url));
+          }
+          if (bodyData.datos.paqueteFirmadoVendedor) {
+              const pf = bodyData.datos.paqueteFirmadoVendedor;
+              const docsVendedor = ['contrato', 'buro', 'responsabilidad', 'resumen'];
+              for (let doc of docsVendedor) {
+                  if (pf[doc] && pf[doc].base64 && pf[doc].base64.includes('base64,')) {
+                      uploadPromises.push(uploadBase64ToS3(pf[doc].base64, `${id}/firmados`, pf[doc].name || `${doc}_firmado.pdf`).then(url => pf[doc].base64 = url));
+                  }
+              }
+          }
+      }
+
+      // 3. También si el body principal trae paqueteFirmadoVendedor directamente
+      if (bodyData.paqueteFirmadoVendedor) {
+          const pf = bodyData.paqueteFirmadoVendedor;
+          const docsVendedor = ['contrato', 'buro', 'responsabilidad', 'resumen'];
+          for (let doc of docsVendedor) {
+              if (pf[doc] && pf[doc].base64 && pf[doc].base64.includes('base64,')) {
+                  uploadPromises.push(uploadBase64ToS3(pf[doc].base64, `${id}/firmados`, pf[doc].name || `${doc}_firmado.pdf`).then(url => pf[doc].base64 = url));
+              }
+          }
+      }
+      
+      if (uploadPromises.length > 0) await Promise.all(uploadPromises);
+      
+      let condicionesBusqueda = [ { id: id }, { folio: id }, { 'datos.id': id }, { 'datos.folio': id } ];
+      if (/^[0-9a-fA-F]{24}$/.test(id)) { condicionesBusqueda.push({ _id: new mongoose.Types.ObjectId(id) }); }
+
+      const cotizacionActualizada = await Cotizacion.findOneAndUpdate(
+          { $or: condicionesBusqueda },
+          { $set: bodyData },
+          { new: true }
+      );
+
+      if (!cotizacionActualizada) return res.status(404).json({ mensaje: "Trámite no encontrado." });
+
+      res.status(200).json({ message: "Cotización actualizada", data: cotizacionActualizada });
+  } catch (error) {
+      console.error("Error al actualizar cotización:", error);
+      res.status(500).json({ error: "Error interno" });
+  }
+});
+
+
+// ==========================================
+// 📦 RUTAS DE INVENTARIO (NUBE)
+// ==========================================
+app.get('/api/inventario/equipos', async (req, res) => {
+  try { const equipos = await Equipo.find().sort({ fechaRegistro: -1 }); res.json(equipos); } catch (error) { res.status(500).json({ error: "Error al obtener equipos" }); }
+});
+
+app.get('/api/inventario/sims', async (req, res) => {
+  try { const sims = await Sim.find().sort({ fechaRegistro: -1 }); res.json(sims); } catch (error) { res.status(500).json({ error: "Error al obtener sims" }); }
+});
+
+app.put('/api/inventario/bulk-update', async (req, res) => {
+  try {
+    const { articulos, estado, sucursal } = req.body;
+    const imeis = articulos.filter(a => a.tipo === 'equipos').map(a => a.id);
+    const iccs = articulos.filter(a => a.tipo === 'sims').map(a => a.id);
+    const updateData = { estado };
+    if (sucursal) updateData.sucursal = sucursal;
+    if (imeis.length > 0) await Equipo.updateMany({ imei: { $in: imeis } }, { $set: updateData });
+    if (iccs.length > 0) await Sim.updateMany({ icc: { $in: iccs } }, { $set: updateData });
+    res.json({ success: true, mensaje: "Inventario sincronizado exitosamente." });
+  } catch (error) {
+    console.error("Error en bulk-update:", error);
+    res.status(500).json({ error: 'Error al actualizar el inventario en la base de datos.' });
+  }
+});
+
+app.put('/api/inventario/articulo', async (req, res) => {
+  try {
+    const { id, tipo, estado } = req.body;
+    if (tipo === 'equipos') await Equipo.findOneAndUpdate({ imei: id }, { estado });
+    else await Sim.findOneAndUpdate({ icc: id }, { estado });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar el artículo.' });
+  }
+});
+
+// ==========================================
+// 🛒 RUTAS DE COMPRAS CENTRALIZADAS
+// ==========================================
+app.post('/api/inventario/cargar-csv', upload.single('archivoCsv'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Falta el archivo CSV.' });
+  
+  const tipoArticulo = req.body.tipo || 'equipos'; 
+  const usuarioCarga = req.body.usuarioCarga || 'SISTEMA';
+  const filasDelCsv = []; 
+  let numeroFila = 1;
+  
+  fs.createReadStream(req.file.path).pipe(csv()).on('data', (fila) => filasDelCsv.push({ filaNum: ++numeroFila, ...fila })).on('end', async () => {
+    fs.unlinkSync(req.file.path); const resultadosExitosos = []; const filasConError = [];
+    
+    for (const item of filasDelCsv) {
+        const { filaNum, imei, icc, modelo, iccid } = item;
+        try {
+            if (tipoArticulo === 'equipos') {
+                if (!imei || !modelo) { filasConError.push({ fila: filaNum, error: 'Falta IMEI o Modelo' }); continue; }
+                const nuevoEquipo = new Equipo({ imei, modelo, iccid }); await nuevoEquipo.save(); resultadosExitosos.push(nuevoEquipo);
+            } else if (tipoArticulo === 'sims') {
+                const simIcc = icc || iccid; if (!simIcc) { filasConError.push({ fila: filaNum, error: 'Falta el ICC' }); continue; }
+                const nuevaSim = new Sim({ icc: simIcc }); await nuevaSim.save(); resultadosExitosos.push(nuevaSim);
+            }
+        } catch (errorDb) {
+            if (errorDb.code === 11000) filasConError.push({ fila: filaNum, error: 'Duplicado.' }); else filasConError.push({ fila: filaNum, error: 'Error interno.' });
+        }
+    }
+    res.status(200).json({ mensaje: 'Completado.', resumen: { guardadosConExito: resultadosExitosos.length, erroresEncontrados: filasConError.length }, nuevosRegistros: resultadosExitosos, detallesErrores: filasConError });
+  }).on('error', (error) => { res.status(500).json({ error: 'Error al leer CSV.' }); });
+});
+
+app.post('/api/compras/ingreso-masivo', async (req, res) => {
+  try {
+    const { sucursalIngreso, fecha, proveedor, referencia, numeroCompra, modelo, sku, cantidad, cajas, seriesProcesadas, usuarioCarga } = req.body; 
+    
+    const esSim = sku.toUpperCase().includes('SIM') || seriesProcesadas[0].length >= 19;
+    
+    const nuevosRegistros = seriesProcesadas.map(serie => {
+      const articulo = { sucursal: sucursalIngreso, estado: 'Disponible', fechaIngreso: fecha || new Date(), folioCompra: numeroCompra, proveedor, referencia, modelo, sku: sku || 'S/N' };
+      if (esSim) { articulo.icc = serie; articulo.tipo = 'SIM'; } else { articulo.imei = serie; articulo.marca = modelo.split(' ')[0]; } return articulo;
+    });
+    
+    let insertados = 0;
+    if (esSim) { const resultado = await Sim.insertMany(nuevosRegistros); insertados = resultado.length; } 
+    else { const resultado = await Equipo.insertMany(nuevosRegistros); insertados = resultado.length; }
+
+    await mongoose.connection.collection('historialCompras').insertOne({ 
+        folio: numeroCompra, referencia, proveedor, sucursalDestino: sucursalIngreso, 
+        fecha, modelo, cantidadTotal: cantidad, cajasFisicas: cajas, 
+        articulosInsertados: insertados, usuarioCarga: usuarioCarga || 'DESCONOCIDO', 
+        timestamp: new Date() 
+    });
+
+    res.status(201).json({ mensaje: 'Ingreso masivo exitoso', insertados: insertados });
+  } catch (error) {
+    if (error.code === 11000) return res.status(400).json({ error: 'Duplicados detectados.' }); res.status(500).json({ error: 'Error interno.' });
+  }
+});
+
+app.get('/api/compras/historial', async (req, res) => {
+  try { const historial = await mongoose.connection.collection('historialCompras').find().sort({ timestamp: -1 }).toArray(); res.json(historial); } 
+  catch (error) { res.status(500).json({ error: 'Error al obtener historial' }); }
+});
+
+app.get('/api/traspasos', async (req, res) => {
+  try { const historial = await Traspaso.find().sort({ _id: -1 }); res.json(historial); } 
+  catch (error) { res.status(500).json({ error: "Error al obtener traspasos" }); }
+});
+
+app.post('/api/traspasos', async (req, res) => {
+  try { const registroFinal = { id: Date.now(), fecha: new Date().toLocaleString('es-MX'), ...req.body }; const nuevoTraspaso = new Traspaso(registroFinal); await nuevoTraspaso.save(); res.status(201).json({ mensaje: 'Traspaso auditado.', registro: registroFinal }); } 
+  catch (error) { res.status(500).json({ error: "Error al guardar traspaso" }); }
+});
+
+// ==========================================
+// 🛡️ MANEJO DE ERRORES GLOBALES (PAYLOAD TOO LARGE)
+// ==========================================
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') {
+    console.error("Payload too large detectado.");
+    return res.status(413).json({ 
+      error: "El archivo enviado es demasiado pesado.", 
+      mensaje: "Los documentos PDF/Imágenes superan el límite del servidor. Por favor sube archivos más ligeros o comprimidos." 
+    });
+  }
+  next(err);
+});
+
+// ==========================================================================
+// 🚀 INICIALIZACIÓN DE LA BASE DE DATOS (MIGRACIÓN ÚNICA)
+// ==========================================================================
+const sembrarUsuariosIniciales = async () => {
+  try {
+      console.log("🌱 Verificando usuarios maestros...");
+      const usuariosIniciales = [
+        { nombre: "LAURA BAUTISTA CONDE", usuario: "LB9748", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+        { nombre: "LAURA GALEANA VALENCIANA", usuario: "LG220B", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
+        { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "MESA DE CONTROL", nivelAcceso: "ADMINISTRADOR" },
+        { nombre: "USUARIO MESA 1", usuario: "MC001", contrasena: "12345", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "USUARIO" }
+      ];
+
+      for (let u of usuariosIniciales) {
+         const existe = await Usuario.findOne({ usuario: u.usuario });
+         if (!existe) {
+            u.contrasenaEncriptada = bcrypt.hashSync(String(u.contrasena), 10);
+            await Usuario.create(u);
+         }
+      }
+  } catch (error) {
+    console.error("❌ Error sembrando usuarios:", error);
+  }
+};
+
+// ==========================================================================
+// 🚀 INICIALIZACIÓN SINCRONIZADA (BASE DE DATOS -> SERVIDOR)
+// ==========================================================================
+if (!process.env.MONGO_URI) {
+  console.error('❌ FATAL: MONGO_URI no está definido en el archivo .env');
+  process.exit(1);
+}
+
+const arrancarServidor = async () => {
+  try {
+    console.log('Conectando a MongoDB Atlas...');
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('🔥 ¡Bóveda conectada! MongoDB Atlas en línea.');
+
+    await sembrarUsuariosIniciales();
+
+    const PORT = process.env.PORT || 4000;
+    app.listen(PORT, () => console.log(`🚀 Servidor Backend corriendo en el puerto ${PORT}`));
+
+  } catch (err) {
+    console.error('❌ Error fatal durante el arranque del servidor:', err);
+    process.exit(1);
+  }
+};
+
+arrancarServidor();
