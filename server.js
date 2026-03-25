@@ -11,6 +11,19 @@ const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
 
+// ==========================================
+// ☁️ CONFIGURACIÓN DE AWS S3
+// ==========================================
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
+const BUCKET_NAME = process.env.AWS_BUCKET_NAME;
+
 const upload = multer({ dest: 'uploads/' }); 
 const express = require('express');
 const app = express();
@@ -109,6 +122,39 @@ const usuarioSchema = new mongoose.Schema({
 const Usuario = mongoose.models.Usuario || mongoose.model('Usuario', usuarioSchema);
 
 const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
+
+// ==========================================================================
+// 🛠️ FUNCIÓN HELPER: SUBIR BASE64 A S3
+// ==========================================================================
+const uploadBase64ToS3 = async (base64String, folder, fileName) => {
+  if (!base64String || !base64String.includes('base64,')) return base64String; // Si ya es URL o está vacío, lo devuelve igual
+
+  try {
+    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return base64String;
+
+    const type = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    
+    // Generar un nombre único para evitar colisiones
+    const uniqueName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}_${fileName.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+
+    const command = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: uniqueName,
+      Body: buffer,
+      ContentType: type,
+      // Nota: Eliminamos ACL: 'public-read' porque habilitaste las ACL deshabilitadas.
+      // S3 usará las políticas de acceso público del bucket.
+    });
+
+    await s3Client.send(command);
+    return `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${uniqueName}`;
+  } catch (error) {
+    console.error("Error subiendo a S3:", error);
+    return base64String; // Fallback: si falla S3, guarda el Base64 original
+  }
+};
 
 // ==========================================================================
 // 🚀 RUTAS DE 2FA Y LOGIN 
@@ -246,8 +292,15 @@ app.post('/api/perfil/avatar', async (req, res) => {
   try {
     const { usuario, avatar } = req.body;
     if (!usuario) return res.status(400).json({ mensaje: "Falta el usuario" });
-    await Perfil.findOneAndUpdate({ usuario: String(usuario).toUpperCase() }, { usuario: String(usuario).toUpperCase(), avatar: avatar || "" }, { upsert: true, new: true });
-    res.status(200).json({ mensaje: "Avatar actualizado exitosamente en MongoDB" });
+    
+    // Subir avatar a AWS S3 si viene en base64
+    let avatarUrl = avatar;
+    if (avatar && avatar.includes('base64,')) {
+        avatarUrl = await uploadBase64ToS3(avatar, 'avatares', `${usuario}_avatar.jpg`);
+    }
+
+    await Perfil.findOneAndUpdate({ usuario: String(usuario).toUpperCase() }, { usuario: String(usuario).toUpperCase(), avatar: avatarUrl || "" }, { upsert: true, new: true });
+    res.status(200).json({ mensaje: "Avatar actualizado exitosamente" });
   } catch (error) { res.status(500).json({ mensaje: "Error interno del servidor" }); }
 });
 
@@ -276,35 +329,20 @@ app.get('/api/ventas', async (req, res) => { try { const ventas = await Venta.fi
 
 app.post('/api/ventas', async (req, res) => { try { const nuevaVenta = new Venta(req.body); await nuevaVenta.save(); res.status(201).json({ message: "Venta guardada", data: nuevaVenta }); } catch (error) { res.status(500).json({ error: "Error al guardar venta" }); } });
 
+
 // ==========================================
 // 🚀 RUTAS DE COTIZACIONES (MESA DE CONTROL)
 // ==========================================
 
-// 🚀 FIX: ESTA ES LA RUTA NUEVA, LIGERA Y OPTIMIZADA PARA MESA DE CONTROL
+// Optimizada: Devuelve todo porque los Base64 ya no existen, ¡ahora son URLs de AWS!
 app.get('/api/cotizaciones', async (req, res) => { 
   try { 
-      // Seleccionamos TODO EXCEPTO los campos Base64 pesados.
-      const cotizacionesLigeras = await Cotizacion.find({}, {
-          'datos.identificacionBase64': 0,
-          'datos.comprobanteBase64': 0,
-          'datos.fichaPagoBase64': 0,
-          'paqueteMesa.contrato.base64': 0,
-          'paqueteMesa.buro.base64': 0,
-          'paqueteMesa.responsabilidad.base64': 0,
-          'paqueteMesa.resumen.base64': 0,
-          'paqueteMesa.qrPago.base64': 0,
-          'paqueteMesa.pagoFormal.base64': 0,
-          'datos.paqueteFirmadoVendedor.contrato.base64': 0,
-          'datos.paqueteFirmadoVendedor.buro.base64': 0,
-          'datos.paqueteFirmadoVendedor.responsabilidad.base64': 0,
-          'datos.paqueteFirmadoVendedor.resumen.base64': 0,
-      }).sort({ _id: -1 }); 
+      const cotizacionesLigeras = await Cotizacion.find().sort({ _id: -1 }); 
       res.json(cotizacionesLigeras); 
   } 
   catch (error) { res.status(500).json({ error: "Error al obtener cotizaciones" }); } 
 });
 
-// 🚀 FIX: ESTA RUTA NUEVA SE USARÁ SOLO CUANDO LE DEN CLIC AL TRÁMITE PARA VER LOS PDFs
 app.get('/api/cotizaciones/detalle/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -320,44 +358,94 @@ app.get('/api/cotizaciones/detalle/:id', async (req, res) => {
     }
 });
 
+// 🚀 CREAR COTIZACIÓN (VENDEDOR SUBE DOCUMENTOS AL CAPTURAR)
 app.post('/api/cotizaciones', async (req, res) => { 
   try { 
-    const nuevaCotizacion = new Cotizacion({ ...req.body, id: req.body.id || req.body.folio }); 
+    let bodyData = { ...req.body };
+    const folio = bodyData.id || bodyData.folio;
+
+    // Procesar imágenes iniciales del vendedor
+    if (bodyData.datos) {
+        if (bodyData.datos.identificacionBase64 && bodyData.datos.identificacionBase64.includes('base64,')) {
+            bodyData.datos.identificacionBase64 = await uploadBase64ToS3(bodyData.datos.identificacionBase64, folio, bodyData.datos.identificacionNombre || 'INE.png');
+        }
+        if (bodyData.datos.comprobanteBase64 && bodyData.datos.comprobanteBase64.includes('base64,')) {
+            bodyData.datos.comprobanteBase64 = await uploadBase64ToS3(bodyData.datos.comprobanteBase64, folio, bodyData.datos.comprobanteNombre || 'Comprobante.png');
+        }
+    }
+
+    const nuevaCotizacion = new Cotizacion({ ...bodyData, id: folio }); 
     await nuevaCotizacion.save(); 
     res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion }); 
   } 
-  catch (error) { res.status(500).json({ error: "Error al guardar cotización" }); } 
+  catch (error) { 
+      console.error(error);
+      res.status(500).json({ error: "Error al guardar cotización" }); 
+  } 
 });
 
+// 🚀 ACTUALIZAR COTIZACIÓN (MESA SUBE CONTRATOS O VENDEDOR SUBE FIRMAS)
 app.put('/api/cotizaciones/:id', async (req, res) => {
   try {
       const { id } = req.params;
+      let bodyData = { ...req.body };
+
+      // 1. Si la Mesa manda el Paquete de Contratos (Paso 8)
+      if (bodyData.paqueteMesa) {
+          const p = bodyData.paqueteMesa;
+          const docsMesa = ['contrato', 'buro', 'responsabilidad', 'resumen', 'qrPago', 'pagoFormal'];
+          for (let doc of docsMesa) {
+              if (p[doc] && p[doc].base64 && p[doc].base64.includes('base64,')) {
+                  p[doc].base64 = await uploadBase64ToS3(p[doc].base64, `${id}/mesa`, p[doc].name || `${doc}.pdf`);
+              }
+          }
+      }
+
+      // 2. Si el Vendedor sube el Expediente Firmado o la Ficha de Pago (Paso 10)
+      if (bodyData.datos) {
+          if (bodyData.datos.fichaPagoBase64 && bodyData.datos.fichaPagoBase64.includes('base64,')) {
+              bodyData.datos.fichaPagoBase64 = await uploadBase64ToS3(bodyData.datos.fichaPagoBase64, `${id}/firmados`, bodyData.datos.fichaPagoNombre || 'FichaPago.pdf');
+          }
+          
+          if (bodyData.datos.paqueteFirmadoVendedor) {
+              const pf = bodyData.datos.paqueteFirmadoVendedor;
+              const docsVendedor = ['contrato', 'buro', 'responsabilidad', 'resumen'];
+              for (let doc of docsVendedor) {
+                  if (pf[doc] && pf[doc].base64 && pf[doc].base64.includes('base64,')) {
+                      pf[doc].base64 = await uploadBase64ToS3(pf[doc].base64, `${id}/firmados`, pf[doc].name || `${doc}_firmado.pdf`);
+                  }
+              }
+          }
+      }
+
+      // 3. También si el body principal trae paqueteFirmadoVendedor directamente
+      if (bodyData.paqueteFirmadoVendedor) {
+          const pf = bodyData.paqueteFirmadoVendedor;
+          const docsVendedor = ['contrato', 'buro', 'responsabilidad', 'resumen'];
+          for (let doc of docsVendedor) {
+              if (pf[doc] && pf[doc].base64 && pf[doc].base64.includes('base64,')) {
+                  pf[doc].base64 = await uploadBase64ToS3(pf[doc].base64, `${id}/firmados`, pf[doc].name || `${doc}_firmado.pdf`);
+              }
+          }
+      }
       
       let condicionesBusqueda = [
-          { id: id },
-          { folio: id },
-          { 'datos.id': id },
-          { 'datos.folio': id }
+          { id: id }, { folio: id }, { 'datos.id': id }, { 'datos.folio': id }
       ];
-      
-      if (/^[0-9a-fA-F]{24}$/.test(id)) {
-          condicionesBusqueda.push({ _id: new mongoose.Types.ObjectId(id) });
-      }
+      if (/^[0-9a-fA-F]{24}$/.test(id)) { condicionesBusqueda.push({ _id: new mongoose.Types.ObjectId(id) }); }
 
       const cotizacionActualizada = await Cotizacion.findOneAndUpdate(
           { $or: condicionesBusqueda },
-          { $set: req.body },
+          { $set: bodyData },
           { new: true }
       );
 
-      if (!cotizacionActualizada) {
-          return res.status(404).json({ mensaje: "Trámite no encontrado en la base de datos." });
-      }
+      if (!cotizacionActualizada) return res.status(404).json({ mensaje: "Trámite no encontrado." });
 
-      res.status(200).json({ message: "Cotización actualizada exitosamente", data: cotizacionActualizada });
+      res.status(200).json({ message: "Cotización actualizada", data: cotizacionActualizada });
   } catch (error) {
       console.error("Error al actualizar cotización:", error);
-      res.status(500).json({ error: "Error interno del servidor" });
+      res.status(500).json({ error: "Error interno" });
   }
 });
 
@@ -494,55 +582,28 @@ app.use((err, req, res, next) => {
 // ==========================================================================
 const sembrarUsuariosIniciales = async () => {
   try {
-      console.log("🌱 Forzando sincronización de usuarios maestros...");
-      
+      console.log("🌱 Verificando usuarios maestros...");
       const usuariosIniciales = [
         { nombre: "LAURA BAUTISTA CONDE", usuario: "LB9748", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
         { nombre: "LAURA GALEANA VALENCIANA", usuario: "LG220B", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-        { nombre: "JOSE ADRIAN FUENTES MENDIOLA", usuario: "JF2778", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-        { nombre: "MARCIA ELENA SUAREZ ROSALES", usuario: "MX5476", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-        { nombre: "EDGAR JAVIER IBARRA FUENTES", usuario: "EI7886", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "LESLIE GUADALUPE LUNA VILLEGAS", usuario: "LL3908", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "MARIANA VANESSA ESPINOSA LAGUNAS", usuario: "ME5986", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "MARTHA LUCIA URIBE ROSAS", usuario: "MU8925", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "MIGUEL RODRIGO FLORES GONZALEZ", usuario: "MF5730", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "IF2 - EVREN PLAZA VIA SAN JUAN CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "ABIGAIL ALBERTO VILLANUEVA", usuario: "AA544V", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "CARLOS ALEXANDER CALDERON LOPEZ", usuario: "CC534D", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        
         { nombre: "DANIEL SANTANA ROSALES", usuario: "DS400G", contrasena: "0", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "MESA DE CONTROL", nivelAcceso: "ADMINISTRADOR" },
-        
-        { nombre: "GABRIEL CORIA SEGURA", usuario: "GC1480", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HZ9 - EVREN SAN PEDRO MARTIR CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "JESUS GALEANA VALENCIANA", usuario: "JG215P", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "JONATHAN CARRASCO CRUZ", usuario: "JO5517", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT5 - EVREN CORP TULANCINGO HGO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "MARCO ANTONIO LUCERO HERNANDEZ", usuario: "ML069A", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HT9 - EVREN PEDREGAL DE SAN NICOLAS CDMX", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "MAYRA JAZMIN MAR CRUZ", usuario: "MM877B", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "GC8 - EVREN TLAHUAC CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "SHARON MICHELLE ARROYO MARTINEZ", usuario: "SA9485", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "ED1 - EVREN XOCHIMILCO CENTRO", sucursal: "TIENDA", nivelAcceso: "USUARIO" },
-        { nombre: "ANGEL ROSAS HERNANDEZ", usuario: "AR788A", contrasena: "12345", categoria: "ED S&R GERENTE DE TIENDA", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-        { nombre: "ESAU ROSALES TINOCO", usuario: "ER1982", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-        { nombre: "OWEN GAEL CARBAJAL GONZALEZ", usuario: "OC8710", contrasena: "12345", categoria: "ED S&R EJECUTIVO UNIVERSAL", organizacion: "HD3 - EVREN VENTA NO PRESENCIAL", sucursal: "TELEMARKETING", nivelAcceso: "USUARIO" },
-        { nombre: "CARLOS ALBERTO ROSAS GARCIA", usuario: "CR6501", contrasena: "12345", categoria: "EJECUTIVO EMPRESARIAL", organizacion: "VENTA EMPRESARIAL", sucursal: "EMPRESAS", nivelAcceso: "USUARIO" },
-        
-        { nombre: "USUARIO MESA 1", usuario: "MC001", contrasena: "12345", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "USUARIO" },
-        { nombre: "USUARIO MESA 2", usuario: "MC002", contrasena: "12345", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "USUARIO" }
+        { nombre: "USUARIO MESA 1", usuario: "MC001", contrasena: "12345", categoria: "MESA DE CONTROL", organizacion: "EVREN CORP", sucursal: "MESA DE CONTROL", nivelAcceso: "USUARIO" }
       ];
 
       for (let u of usuariosIniciales) {
-         u.contrasenaEncriptada = bcrypt.hashSync(String(u.contrasena), 10);
-         await Usuario.findOneAndUpdate(
-            { usuario: u.usuario }, 
-            { $set: u }, 
-            { upsert: true, new: true }
-         );
+         const existe = await Usuario.findOne({ usuario: u.usuario });
+         if (!existe) {
+            u.contrasenaEncriptada = bcrypt.hashSync(String(u.contrasena), 10);
+            await Usuario.create(u);
+         }
       }
-      console.log("✅ Usuarios iniciales sincronizados y reseteados con éxito.");
-
   } catch (error) {
     console.error("❌ Error sembrando usuarios:", error);
   }
 };
 
 // ==========================================================================
-// 🚀 INICIALIZACIÓN SINCRONIZADA (BASE DE DATOS -> SEMBRADO -> SERVIDOR)
+// 🚀 INICIALIZACIÓN SINCRONIZADA (BASE DE DATOS -> SERVIDOR)
 // ==========================================================================
 if (!process.env.MONGO_URI) {
   console.error('❌ FATAL: MONGO_URI no está definido en el archivo .env');
