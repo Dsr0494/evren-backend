@@ -15,7 +15,6 @@ const upload = multer({ dest: 'uploads/' });
 const express = require('express');
 const app = express();
 
-// 🚀 FIX CRÍTICO: Límite ampliado a 50MB para soportar múltiples PDFs en Base64
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -49,7 +48,6 @@ const Catalogo = mongoose.model('Catalogo', catalogoSchema);
 const ventaSchema = new mongoose.Schema({}, { strict: false, timestamps: true });
 const Venta = mongoose.model('Venta', ventaSchema);
 
-// Definimos explícitamente el id personalizado para las cotizaciones
 const cotizacionSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true }
 }, { strict: false, timestamps: true });
@@ -281,14 +279,49 @@ app.post('/api/ventas', async (req, res) => { try { const nuevaVenta = new Venta
 // ==========================================
 // 🚀 RUTAS DE COTIZACIONES (MESA DE CONTROL)
 // ==========================================
+
+// 🚀 FIX: ESTA ES LA RUTA NUEVA, LIGERA Y OPTIMIZADA PARA MESA DE CONTROL
 app.get('/api/cotizaciones', async (req, res) => { 
-  try { const cotizaciones = await Cotizacion.find().sort({ _id: -1 }); res.json(cotizaciones); } 
+  try { 
+      // Seleccionamos TODO EXCEPTO los campos Base64 pesados.
+      const cotizacionesLigeras = await Cotizacion.find({}, {
+          'datos.identificacionBase64': 0,
+          'datos.comprobanteBase64': 0,
+          'datos.fichaPagoBase64': 0,
+          'paqueteMesa.contrato.base64': 0,
+          'paqueteMesa.buro.base64': 0,
+          'paqueteMesa.responsabilidad.base64': 0,
+          'paqueteMesa.resumen.base64': 0,
+          'paqueteMesa.qrPago.base64': 0,
+          'paqueteMesa.pagoFormal.base64': 0,
+          'datos.paqueteFirmadoVendedor.contrato.base64': 0,
+          'datos.paqueteFirmadoVendedor.buro.base64': 0,
+          'datos.paqueteFirmadoVendedor.responsabilidad.base64': 0,
+          'datos.paqueteFirmadoVendedor.resumen.base64': 0,
+      }).sort({ _id: -1 }); 
+      res.json(cotizacionesLigeras); 
+  } 
   catch (error) { res.status(500).json({ error: "Error al obtener cotizaciones" }); } 
+});
+
+// 🚀 FIX: ESTA RUTA NUEVA SE USARÁ SOLO CUANDO LE DEN CLIC AL TRÁMITE PARA VER LOS PDFs
+app.get('/api/cotizaciones/detalle/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        let condicionesBusqueda = [ { id: id }, { folio: id }, { 'datos.id': id }, { 'datos.folio': id } ];
+        if (/^[0-9a-fA-F]{24}$/.test(id)) { condicionesBusqueda.push({ _id: new mongoose.Types.ObjectId(id) }); }
+        
+        const cotizacionCompleta = await Cotizacion.findOne({ $or: condicionesBusqueda });
+        if (!cotizacionCompleta) return res.status(404).json({ mensaje: "Trámite no encontrado." });
+        
+        res.status(200).json(cotizacionCompleta);
+    } catch (error) {
+        res.status(500).json({ error: "Error al obtener detalles de la cotización." });
+    }
 });
 
 app.post('/api/cotizaciones', async (req, res) => { 
   try { 
-    // Usamos el ID custom (ej. C-12345) como llave única
     const nuevaCotizacion = new Cotizacion({ ...req.body, id: req.body.id || req.body.folio }); 
     await nuevaCotizacion.save(); 
     res.status(201).json({ message: "Cotización guardada", data: nuevaCotizacion }); 
@@ -296,12 +329,10 @@ app.post('/api/cotizaciones', async (req, res) => {
   catch (error) { res.status(500).json({ error: "Error al guardar cotización" }); } 
 });
 
-// 🚀 FIX: RUTAR PARA ACTUALIZAR COTIZACIONES / MESA DE CONTROL (A PRUEBA DE BALAS)
 app.put('/api/cotizaciones/:id', async (req, res) => {
   try {
       const { id } = req.params;
       
-      // Creamos un array de condiciones de búsqueda
       let condicionesBusqueda = [
           { id: id },
           { folio: id },
@@ -309,12 +340,10 @@ app.put('/api/cotizaciones/:id', async (req, res) => {
           { 'datos.folio': id }
       ];
       
-      // Si el ID tiene 24 caracteres hexadecimales (es un ObjectId válido de Mongo)
       if (/^[0-9a-fA-F]{24}$/.test(id)) {
           condicionesBusqueda.push({ _id: new mongoose.Types.ObjectId(id) });
       }
 
-      // Usamos $or para buscar por cualquiera de las condiciones
       const cotizacionActualizada = await Cotizacion.findOneAndUpdate(
           { $or: condicionesBusqueda },
           { $set: req.body },
@@ -537,5 +566,4 @@ const arrancarServidor = async () => {
   }
 };
 
-// Ejecutar el arranque
 arrancarServidor();
