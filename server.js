@@ -14,7 +14,7 @@ const fs = require('fs');
 // ==========================================
 // ☁️ CONFIGURACIÓN DE AWS S3
 // ==========================================
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const s3Client = new S3Client({
@@ -159,31 +159,32 @@ const uploadBase64ToS3 = async (base64String, folder, fileName) => {
 // ==========================================================================
 // 🏎️ TICKET VIP: GENERADOR DE URLS PRE-FIRMADAS PARA S3
 // ==========================================================================
-app.post('/api/s3/presigned-url', async (req, res) => {
+// ==========================================================================
+// 👁️ TICKET VIP: GENERADOR DE URLS PARA VER ARCHIVOS PRIVADOS
+// ==========================================================================
+app.post('/api/s3/view-url', async (req, res) => {
   try {
-    const { fileName, fileType, folder } = req.body;
-    if (!fileName || !fileType) return res.status(400).json({ error: "Faltan datos del archivo" });
+    const { fileUrl } = req.body;
+    if (!fileUrl || !fileUrl.includes('amazonaws.com')) {
+        return res.json({ url: fileUrl }); 
+    }
 
-    // Limpiamos el nombre del archivo para evitar caracteres raros en la URL
-    const cleanFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const uniqueName = `${folder || 'tramites'}/${Date.now()}_${Math.random().toString(36).substring(7)}_${cleanFileName}`;
+    // Extraer el "Key" (nombre del archivo) de la URL completa
+    const bucketDomain = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`;
+    const fileKey = fileUrl.replace(bucketDomain, '');
 
-    const command = new PutObjectCommand({
+    const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,
-      Key: uniqueName,
-      ContentType: fileType
+      Key: fileKey
     });
 
-    // Pedimos a AWS una URL válida por 5 minutos (300 segundos) para hacer un PUT directo
+    // Generar un pase VIP de 5 minutos para VER el archivo
     const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
 
-    // Calculamos cómo quedará la URL pública final una vez que el cliente suba el archivo
-    const publicUrl = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${uniqueName}`;
-
-    res.json({ presignedUrl, publicUrl });
+    res.json({ url: presignedUrl });
   } catch (error) {
-    console.error("Error generando Presigned URL:", error);
-    res.status(500).json({ error: "Error interno al generar el ticket de subida a S3" });
+    console.error("Error generando Presigned URL de lectura:", error);
+    res.status(500).json({ error: "Error al generar ticket de lectura" });
   }
 });
 
