@@ -159,6 +159,34 @@ const uploadBase64ToS3 = async (base64String, folder, fileName) => {
 // ==========================================================================
 // 🏎️ TICKET VIP: GENERADOR DE URLS PRE-FIRMADAS PARA S3
 // ==========================================================================
+app.post('/api/s3/presigned-url', async (req, res) => {
+  try {
+    const { fileName, fileType, folder } = req.body;
+    if (!fileName || !fileType) return res.status(400).json({ error: "Faltan datos del archivo" });
+
+    // Limpiamos el nombre del archivo para evitar caracteres raros en la URL
+    const cleanFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const uniqueName = `${folder || 'tramites'}/${Date.now()}_${Math.random().toString(36).substring(7)}_${cleanFileName}`;
+
+    const command = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: uniqueName,
+      ContentType: fileType
+    });
+
+    // Pedimos a AWS una URL válida por 5 minutos (300 segundos) para hacer un PUT directo
+    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+
+    // Calculamos cómo quedará la URL pública final una vez que el cliente suba el archivo
+    const publicUrl = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${uniqueName}`;
+
+    res.json({ presignedUrl, publicUrl });
+  } catch (error) {
+    console.error("Error generando Presigned URL:", error);
+    res.status(500).json({ error: "Error interno al generar el ticket de subida a S3" });
+  }
+});
+
 // ==========================================================================
 // 👁️ TICKET VIP: GENERADOR DE URLS PARA VER ARCHIVOS PRIVADOS
 // ==========================================================================
@@ -497,6 +525,24 @@ app.put('/api/cotizaciones/:id', async (req, res) => {
   } catch (error) {
       console.error("Error al actualizar cotización:", error);
       res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// 🚀 ELIMINAR COTIZACIÓN (Para que el vendedor limpie su historial)
+app.delete('/api/cotizaciones/:id', async (req, res) => {
+  try {
+      const { id } = req.params;
+      let condicionesBusqueda = [ { id: id }, { folio: id }, { 'datos.id': id }, { 'datos.folio': id } ];
+      if (/^[0-9a-fA-F]{24}$/.test(id)) { condicionesBusqueda.push({ _id: new mongoose.Types.ObjectId(id) }); }
+
+      const cotizacionEliminada = await Cotizacion.findOneAndDelete({ $or: condicionesBusqueda });
+
+      if (!cotizacionEliminada) return res.status(404).json({ mensaje: "Trámite no encontrado." });
+
+      res.status(200).json({ message: "Cotización eliminada correctamente" });
+  } catch (error) {
+      console.error("Error al eliminar cotización:", error);
+      res.status(500).json({ error: "Error interno al eliminar" });
   }
 });
 
