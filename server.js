@@ -15,7 +15,6 @@ const fs = require('fs');
 // ☁️ CONFIGURACIÓN DE AWS S3
 // ==========================================
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-// 🌟 NUEVO: Importamos el generador de URLs pre-firmadas (Tickets VIP)
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const s3Client = new S3Client({
@@ -366,10 +365,13 @@ app.post('/api/ventas', async (req, res) => { try { const nuevaVenta = new Venta
 // 🚀 RUTAS DE COTIZACIONES (MESA DE CONTROL)
 // ==========================================
 
-// Optimizada: Devuelve todo porque los Base64 ya no existen, ¡ahora son URLs de AWS!
+// Optimizada: Excluimos los documentos pesados para que la bandeja cargue a la velocidad de la luz
 app.get('/api/cotizaciones', async (req, res) => { 
   try { 
-      const cotizacionesLigeras = await Cotizacion.find().sort({ _id: -1 }); 
+      const cotizacionesLigeras = await Cotizacion.find()
+          .select('-paqueteMesa -paqueteFirmadoVendedor -datos.ineFrontBase64 -datos.ineBackBase64 -datos.comprobanteBase64 -datos.identificacionBase64 -datos.fichaPagoBase64')
+          .sort({ _id: -1 }); 
+          
       res.json(cotizacionesLigeras); 
   } 
   catch (error) { res.status(500).json({ error: "Error al obtener cotizaciones" }); } 
