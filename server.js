@@ -15,6 +15,9 @@ const fs = require('fs');
 // ☁️ CONFIGURACIÓN DE AWS S3
 // ==========================================
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+// 🌟 NUEVO: Importamos el generador de URLs pre-firmadas (Tickets VIP)
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -22,7 +25,7 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
   }
 });
-const BUCKET_NAME = process.env.AWS_BUCKET_NAME;
+const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || process.env.AWS_BUCKET_NAME;
 
 const upload = multer({ dest: 'uploads/' }); 
 const express = require('express');
@@ -124,7 +127,7 @@ const Usuario = mongoose.models.Usuario || mongoose.model('Usuario', usuarioSche
 const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
 
 // ==========================================================================
-// 🛠️ FUNCIÓN HELPER: SUBIR BASE64 A S3
+// 🛠️ FUNCIÓN HELPER: SUBIR BASE64 A S3 (MÉTODO ANTIGUO / FALLBACK)
 // ==========================================================================
 const uploadBase64ToS3 = async (base64String, folder, fileName) => {
   if (!base64String || !base64String.includes('base64,')) return base64String; 
@@ -153,6 +156,38 @@ const uploadBase64ToS3 = async (base64String, folder, fileName) => {
     return base64String; // Fallback: si falla S3, guarda el Base64 original en MongoDB
   }
 };
+
+// ==========================================================================
+// 🏎️ TICKET VIP: GENERADOR DE URLS PRE-FIRMADAS PARA S3
+// ==========================================================================
+app.post('/api/s3/presigned-url', async (req, res) => {
+  try {
+    const { fileName, fileType, folder } = req.body;
+    if (!fileName || !fileType) return res.status(400).json({ error: "Faltan datos del archivo" });
+
+    // Limpiamos el nombre del archivo para evitar caracteres raros en la URL
+    const cleanFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const uniqueName = `${folder || 'tramites'}/${Date.now()}_${Math.random().toString(36).substring(7)}_${cleanFileName}`;
+
+    const command = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: uniqueName,
+      ContentType: fileType
+    });
+
+    // Pedimos a AWS una URL válida por 5 minutos (300 segundos) para hacer un PUT directo
+    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+
+    // Calculamos cómo quedará la URL pública final una vez que el cliente suba el archivo
+    const publicUrl = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${uniqueName}`;
+
+    res.json({ presignedUrl, publicUrl });
+  } catch (error) {
+    console.error("Error generando Presigned URL:", error);
+    res.status(500).json({ error: "Error interno al generar el ticket de subida a S3" });
+  }
+});
+
 
 // ==========================================================================
 // 🚀 RUTAS DE 2FA Y LOGIN 
@@ -379,7 +414,7 @@ app.post('/api/cotizaciones', async (req, res) => {
             uploadPromises.push(uploadBase64ToS3(bodyData.datos.comprobanteBase64, folio, bodyData.datos.comprobanteNombre || 'Comprobante.jpg').then(url => { bodyData.datos.comprobanteBase64 = url; }));
         }
         
-        // Porcel si aca caso se mandó un INE viejo unificado
+        // Por si acaso se mandó un INE viejo unificado
         if (bodyData.datos.identificacionBase64 && bodyData.datos.identificacionBase64.includes('base64,')) {
             uploadPromises.push(uploadBase64ToS3(bodyData.datos.identificacionBase64, folio, bodyData.datos.identificacionNombre || 'INE.jpg').then(url => { bodyData.datos.identificacionBase64 = url; }));
         }
