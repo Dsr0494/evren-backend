@@ -10,6 +10,7 @@ const qrcode = require('qrcode');
 const multer = require('multer');
 const csv = require('csv-parser');
 const fs = require('fs');
+const path = require('path');
 
 // ==========================================
 // ☁️ CONFIGURACIÓN DE AWS S3
@@ -122,6 +123,19 @@ const usuarioSchema = new mongoose.Schema({
   fechaCreacion: { type: Date, default: Date.now }
 });
 const Usuario = mongoose.models.Usuario || mongoose.model('Usuario', usuarioSchema);
+
+// 🚀 NUEVO MODELO: NOTIFICACIONES GLOBALES EN MONGODB
+const notificacionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  titulo: { type: String, required: true },
+  texto: { type: String },
+  tiempo: { type: String },
+  esCritica: { type: Boolean, default: false },
+  audiencia: { type: String, default: 'Todos' },
+  accion: { type: String },
+  moduloOrigen: { type: String }
+}, { timestamps: true });
+const Notificacion = mongoose.models.Notificacion || mongoose.model('Notificacion', notificacionSchema);
 
 const SECRET_KEY = process.env.SECRET_KEY || "clave_de_respaldo_segura"; 
 
@@ -659,6 +673,47 @@ app.post('/api/traspasos', async (req, res) => {
   try { const registroFinal = { id: Date.now(), fecha: new Date().toLocaleString('es-MX'), ...req.body }; const nuevoTraspaso = new Traspaso(registroFinal); await nuevoTraspaso.save(); res.status(201).json({ mensaje: 'Traspaso auditado.', registro: registroFinal }); } 
   catch (error) { res.status(500).json({ error: "Error al guardar traspaso" }); }
 });
+
+
+// ==========================================
+// 🔔 RUTAS DE NOTIFICACIONES GLOBALES
+// ==========================================
+app.get('/api/notificaciones', async (req, res) => {
+  try {
+    // Obtenemos las últimas 100 notificaciones para no saturar la red
+    const notifs = await Notificacion.find().sort({ createdAt: -1 }).limit(100);
+    res.json(notifs);
+  } catch (error) {
+    console.error("Error obteniendo notificaciones:", error);
+    res.status(500).json({ error: "Error al obtener notificaciones" });
+  }
+});
+
+app.post('/api/notificaciones', async (req, res) => {
+  try {
+    const { id, titulo, texto, esCritica, audiencia, accion, moduloOrigen } = req.body;
+    
+    const notifId = id || Date.now().toString() + Math.floor(Math.random() * 1000);
+
+    const nuevaNotif = new Notificacion({
+      id: notifId,
+      titulo,
+      texto,
+      esCritica,
+      audiencia,
+      accion,
+      moduloOrigen,
+      tiempo: new Date().toISOString()
+    });
+
+    await nuevaNotif.save();
+    res.status(201).json(nuevaNotif);
+  } catch (error) {
+    console.error("Error guardando notificación:", error);
+    res.status(500).json({ error: "Error al guardar notificación" });
+  }
+});
+
 
 // ==========================================
 // 🛡️ MANEJO DE ERRORES GLOBALES (PAYLOAD TOO LARGE)
